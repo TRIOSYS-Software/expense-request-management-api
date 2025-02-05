@@ -1,0 +1,5 @@
+.env
+go.sum
+.air.toml
+vendor/
+tmp/

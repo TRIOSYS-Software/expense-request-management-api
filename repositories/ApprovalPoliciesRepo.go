@@ -30,7 +30,13 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicy *models.Appro
 	return a.db.Create(approvalPolicy).Error
 }
 
-func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(approvalPolicy *models.ApprovalPolicies) error {
+func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicy *models.ApprovalPolicies) error {
+	oldApprovalPolicy, err := a.GetApprovalPolicyByID(id)
+	if err != nil {
+		return err
+	}
+	approvalPolicy.ID = oldApprovalPolicy.ID
+	approvalPolicy.CreatedAt = oldApprovalPolicy.CreatedAt
 	return a.db.Save(approvalPolicy).Error
 }
 

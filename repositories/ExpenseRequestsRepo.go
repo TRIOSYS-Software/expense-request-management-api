@@ -54,35 +54,39 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			}
 		}
 	} else {
-		// approvalPolicy, err := r.FindHighestPolicy(*expenseRequest)
-		// if err != nil {
-		// 	tx.Rollback()
-		// 	return err
-		// }
-		// approverRoles := strings.Split(approvalPolicy.Approvers, ",")
+		approvalPolicy, err := r.FindHighestPolicy(*expenseRequest)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		approverRoles := strings.Split(approvalPolicy.ApproverRoles, ",")
 
-		// for i, approverRole := range approverRoles {
-		// 	var approverUser models.Users
-		// 	tx.Where("role_id = ? AND department_id = ?", approverRole, requestUser.DepartmentID).First(&approverUser)
-		// 	expenseApprovals := models.ExpenseApprovals{
-		// 		RequestID:  expenseRequest.ID,
-		// 		ApproverID: approverUser.ID,
-		// 		Level:      uint(i) + 1,
-		// 		Status:     "pending",
-		// 	}
-		// 	if err := tx.Create(&expenseApprovals).Error; err != nil {
-		// 		tx.Rollback()
-		// 		return err
-		// 	}
-		// }
+		for i, approverRole := range approverRoles {
+			var approverUser models.Users
+			tx.Where("role_id = ?", approverRole).First(&approverUser)
+			expenseApprovals := models.ExpenseApprovals{
+				RequestID:  expenseRequest.ID,
+				ApproverID: approverUser.ID,
+				Level:      uint(i) + 1,
+				Status:     "pending",
+			}
+			if err := tx.Create(&expenseApprovals).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
 	}
 
 	return tx.Commit().Error
 }
 
 func (r *ExpenseRequestsRepo) FindHighestPolicy(request models.ExpenseRequests) (*models.ApprovalPolicies, error) {
+	var requestUser models.Users
+	if err := r.db.Where("id = ?", request.UserID).First(&requestUser).Error; err != nil {
+		return nil, err
+	}
 	var approvalPolicies []models.ApprovalPolicies
-	err := r.db.Where("department_id = ? ", request.UserID).Find(&approvalPolicies).Error
+	err := r.db.Where("department_id = ? OR department_id IS NULL", requestUser.DepartmentID).Find(&approvalPolicies).Error
 	if err != nil {
 		return nil, err
 	}
@@ -109,15 +113,30 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request models.ExpenseRequests) 
 				return &approvalPolicy, nil
 			}
 		case "amount":
-			conditionValues := strings.Split(approvalPolicy.ConditionValue, " ")
-			condition, value := conditionValues[0], conditionValues[1]
-			amount, _ := strconv.Atoi(value)
-			if condition == ">" && request.Amount > float64(amount) {
-				return &approvalPolicy, nil
-			} else if condition == "<" && request.Amount < float64(amount) {
+			if isAmountConditionMet(approvalPolicy.ConditionValue, request.Amount) {
 				return &approvalPolicy, nil
 			}
 		}
 	}
 	return nil, nil
+}
+
+func isAmountConditionMet(condition string, amount float64) bool {
+	// Example conditions: "> 1000", "<= 500", ">= 2000"
+	operator := condition[:1] // Extract first character (>, <, =)
+	value, _ := strconv.ParseFloat(condition[2:], 64)
+
+	switch operator {
+	case ">":
+		return amount > value
+	case "<":
+		return amount < value
+	case "=":
+		return amount == value
+	case "<=":
+		return amount <= value
+	case ">=":
+		return amount >= value
+	}
+	return false
 }

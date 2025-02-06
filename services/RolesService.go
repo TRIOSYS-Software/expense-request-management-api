@@ -26,7 +26,7 @@ func (r *RolesService) GetRoleByID(id uint) (*models.Roles, error) {
 }
 
 func (r *RolesService) UpdateRole(role *models.Roles) error {
-	return r.RolesRepo.CreateRole(role)
+	return r.RolesRepo.UpdateRole(role)
 }
 
 func (r *RolesService) DeleteRole(id uint) error {

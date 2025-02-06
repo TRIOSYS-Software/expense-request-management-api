@@ -9,15 +9,15 @@ type ExpenseCategoriesService struct {
 	ExpenseCategoriesRepo repositories.ExpenseCategoriesRepo
 }
 
-func NewExpenseCategoriesService(expenseCategoriesRepo repositories.ExpenseCategoriesRepo) *ExpenseCategoriesService {
-	return &ExpenseCategoriesService{ExpenseCategoriesRepo: expenseCategoriesRepo}
+func NewExpenseCategoriesService(expenseCategoriesRepo *repositories.ExpenseCategoriesRepo) *ExpenseCategoriesService {
+	return &ExpenseCategoriesService{ExpenseCategoriesRepo: *expenseCategoriesRepo}
 }
 
-func (ec *ExpenseCategoriesService) GetExpenseCategories() []models.ExpenseCategories {
+func (ec *ExpenseCategoriesService) GetExpenseCategories() ([]models.ExpenseCategories, error) {
 	return ec.ExpenseCategoriesRepo.GetExpenseCategories()
 }
 
-func (ec *ExpenseCategoriesService) GetExpenseCategoryByID(id uint) (models.ExpenseCategories, error) {
+func (ec *ExpenseCategoriesService) GetExpenseCategoryByID(id uint) (*models.ExpenseCategories, error) {
 	return ec.ExpenseCategoriesRepo.GetExpenseCategoryByID(id)
 }
 

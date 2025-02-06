@@ -81,5 +81,6 @@ func (c *Config) InitializedDB() {
 		&models.ExpenseApprovals{},
 		&models.Roles{},
 		&models.Departments{},
+		&models.ExpenseCategories{},
 	)
 }

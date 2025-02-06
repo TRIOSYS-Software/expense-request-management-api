@@ -30,7 +30,12 @@ func (d *DepartmentsRepo) GetDepartmentByID(id uint) (*models.Departments, error
 	return &department, err
 }
 
-func (d *DepartmentsRepo) UpdateDepartment(department *models.Departments) error {
+func (d *DepartmentsRepo) UpdateDepartment(id uint, department *models.Departments) error {
+	oldDepartment, err := d.GetDepartmentByID(id)
+	if err != nil {
+		return err
+	}
+	department.ID = oldDepartment.ID
 	return d.db.Save(department).Error
 }
 

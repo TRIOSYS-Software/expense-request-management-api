@@ -25,8 +25,8 @@ func (d *DepartmentsService) GetDepartmentByID(id uint) (*models.Departments, er
 	return d.DepartmentsRepo.GetDepartmentByID(id)
 }
 
-func (d *DepartmentsService) UpdateDepartment(department *models.Departments) error {
-	return d.DepartmentsRepo.UpdateDepartment(department)
+func (d *DepartmentsService) UpdateDepartment(id uint, department *models.Departments) error {
+	return d.DepartmentsRepo.UpdateDepartment(id, department)
 }
 
 func (d *DepartmentsService) DeleteDepartment(id uint) error {

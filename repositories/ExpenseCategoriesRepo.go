@@ -10,20 +10,20 @@ type ExpenseCategoriesRepo struct {
 	db *gorm.DB
 }
 
-func NewExpenseCategroyRepo(db *gorm.DB) *ExpenseCategoriesRepo {
+func NewExpenseCategoriesRepo(db *gorm.DB) *ExpenseCategoriesRepo {
 	return &ExpenseCategoriesRepo{db: db}
 }
 
-func (ecr *ExpenseCategoriesRepo) GetExpenseCategories() []models.ExpenseCategories {
+func (ecr *ExpenseCategoriesRepo) GetExpenseCategories() ([]models.ExpenseCategories, error) {
 	var expenseCategories []models.ExpenseCategories
-	ecr.db.Find(&expenseCategories)
-	return expenseCategories
+	err := ecr.db.Find(&expenseCategories).Error
+	return expenseCategories, err
 }
 
-func (ecr *ExpenseCategoriesRepo) GetExpenseCategoryByID(id uint) (models.ExpenseCategories, error) {
+func (ecr *ExpenseCategoriesRepo) GetExpenseCategoryByID(id uint) (*models.ExpenseCategories, error) {
 	var expenseCategory models.ExpenseCategories
-	err := ecr.db.First(expenseCategory, id).Error
-	return expenseCategory, err
+	err := ecr.db.First(&expenseCategory, id).Error
+	return &expenseCategory, err
 }
 
 func (ecr *ExpenseCategoriesRepo) CreateExpenseCategory(expenseCategory *models.ExpenseCategories) error {

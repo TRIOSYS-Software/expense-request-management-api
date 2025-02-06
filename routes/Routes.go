@@ -26,6 +26,16 @@ func InitialRoute(e *echo.Echo, db *gorm.DB) {
 	rolesService := services.NewRolesService(rolesRepo)
 	rolesController := controllers.NewRolesController(rolesService)
 	rolesRoutes(apiV1, rolesController)
+
+	approvalPoliciesRepo := repositories.NewApprovalPoliciesRepo(db)
+	approvalPoliciesService := services.NewApprovalPoliciesService(approvalPoliciesRepo)
+	approvalPoliciesController := controllers.NewApprovalPoliciesController(approvalPoliciesService)
+	approvalPoliciesRoutes(apiV1, approvalPoliciesController)
+
+	expenseCategoriesRepo := repositories.NewExpenseCategoriesRepo(db)
+	expenseCategoriesService := services.NewExpenseCategoriesService(expenseCategoriesRepo)
+	expenseCategoriesController := controllers.NewExpenseCategoriesController(expenseCategoriesService)
+	expenseCategoriesRoutes(apiV1, expenseCategoriesController)
 }
 
 func usersRoutes(e *echo.Group, controllers *controllers.UsersController) {
@@ -40,10 +50,30 @@ func departmentsRoutes(e *echo.Group, controllers *controllers.DepartmentsContro
 	e.GET("/departments", controllers.GetDepartments)
 	e.POST("/departments", controllers.CreateDepartment)
 	e.GET("/departments/:id", controllers.GetDepartmentByID)
+	e.PUT("/departments/:id", controllers.UpdateDepartment)
+	e.DELETE("/departments/:id", controllers.DeleteDepartment)
 }
 
 func rolesRoutes(e *echo.Group, controllers *controllers.RolesController) {
 	e.GET("/roles", controllers.GetRoles)
 	e.POST("/roles", controllers.CreateRole)
 	e.GET("/roles/:id", controllers.GetRoleByID)
+	e.PUT("/roles/:id", controllers.UpdateRole)
+	e.DELETE("/roles/:id", controllers.DeleteRole)
+}
+
+func approvalPoliciesRoutes(e *echo.Group, controllers *controllers.ApprovalPoliciesController) {
+	e.GET("/approval-policies", controllers.GetApprovalPolicies)
+	e.POST("/approval-policies", controllers.CreateApprovalPolicy)
+	e.GET("/approval-policies/:id", controllers.GetApprovalPolicyByID)
+	e.PUT("/approval-policies/:id", controllers.UpdateApprovalPolicy)
+	e.DELETE("/approval-policies/:id", controllers.DeleteApprovalPolicy)
+}
+
+func expenseCategoriesRoutes(e *echo.Group, controllers *controllers.ExpenseCategoriesController) {
+	e.GET("/expense-categories", controllers.GetExpenseCategories)
+	e.POST("/expense-categories", controllers.CreateExpenseCategory)
+	e.GET("/expense-categories/:id", controllers.GetExpenseCategoryByID)
+	e.PUT("/expense-categories/:id", controllers.UpdateExpenseCategory)
+	e.DELETE("/expense-categories/:id", controllers.DeleteExpenseCategory)
 }

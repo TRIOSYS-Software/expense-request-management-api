@@ -50,11 +50,15 @@ func (d *DepartmentsController) GetDepartmentByID(c echo.Context) error {
 }
 
 func (d *DepartmentsController) UpdateDepartment(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, err)
+	}
 	department := new(models.Departments)
 	if err := c.Bind(department); err != nil {
 		return c.JSON(http.StatusBadRequest, err)
 	}
-	if err := d.DepartmentsService.UpdateDepartment(department); err != nil {
+	if err := d.DepartmentsService.UpdateDepartment(uint(id), department); err != nil {
 		return c.JSON(http.StatusNotFound, err)
 	}
 	return c.JSON(http.StatusOK, department)

@@ -50,10 +50,15 @@ func (r *RolesController) GetRoleByID(c echo.Context) error {
 }
 
 func (r *RolesController) UpdateRole(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, err)
+	}
 	role := new(models.Roles)
 	if err := c.Bind(role); err != nil {
 		return c.JSON(http.StatusBadRequest, err)
 	}
+	role.ID = uint(id)
 	if err := r.RolesService.UpdateRole(role); err != nil {
 		return c.JSON(http.StatusNotFound, err)
 	}

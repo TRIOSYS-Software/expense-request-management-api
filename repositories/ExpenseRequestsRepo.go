@@ -54,7 +54,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			}
 		}
 	} else {
-		approvalPolicy, err := r.FindHighestPolicy(*expenseRequest)
+		approvalPolicy, err := r.FindHighestPolicy(*expenseRequest, requestUser.DepartmentID)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -80,13 +80,10 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 	return tx.Commit().Error
 }
 
-func (r *ExpenseRequestsRepo) FindHighestPolicy(request models.ExpenseRequests) (*models.ApprovalPolicies, error) {
-	var requestUser models.Users
-	if err := r.db.Where("id = ?", request.UserID).First(&requestUser).Error; err != nil {
-		return nil, err
-	}
+func (r *ExpenseRequestsRepo) FindHighestPolicy(request models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
+
 	var approvalPolicies []models.ApprovalPolicies
-	err := r.db.Where("department_id = ? OR department_id IS NULL", requestUser.DepartmentID).Find(&approvalPolicies).Error
+	err := r.db.Where("department_id = ? OR department_id IS NULL", departmentID).Find(&approvalPolicies).Error
 	if err != nil {
 		return nil, err
 	}

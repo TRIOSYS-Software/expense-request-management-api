@@ -5,15 +5,17 @@ import (
 	"shwetaik-expense-management-api/routes"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
 	e := echo.New()
 
-	configs := configs.Config{}
-	cfg := configs.LoadEnv(".env")
-	err := cfg.ConnectDB()
-	if err != nil {
+	e.Use(middleware.CORS())
+
+	cfg := configs.Envs
+
+	if err := cfg.ConnectDB(); err != nil {
 		e.Logger.Fatal(err)
 	}
 

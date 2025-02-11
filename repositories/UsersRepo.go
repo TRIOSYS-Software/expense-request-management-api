@@ -38,3 +38,9 @@ func (u *UsersRepo) UpdateUser(user *models.Users) error {
 func (u *UsersRepo) DeleteUser(id uint) error {
 	return u.db.Delete(&models.Users{}, id).Error
 }
+
+func (u *UsersRepo) LoginUser(user *models.Users) (*models.Users, error) {
+	var users models.Users
+	err := u.db.First(&users, "email = ?", user.Email).Error
+	return &users, err
+}

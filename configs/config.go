@@ -1,6 +1,7 @@
 package configs
 
 import (
+	"errors"
 	"os"
 	"shwetaik-expense-management-api/models"
 
@@ -18,9 +19,10 @@ type Config struct {
 	DBPort     string
 	DBName     string
 	DB         *gorm.DB
+	JWTSecret  string
 }
 
-func (c *Config) LoadEnv(env string) *Config {
+func loadEnv(env string) *Config {
 	godotenv.Load(env)
 
 	cfg := &Config{}
@@ -58,6 +60,11 @@ func (c *Config) LoadEnv(env string) *Config {
 	if cfg.DBPort == "" {
 		cfg.DBPort = "3306"
 	}
+
+	cfg.JWTSecret = os.Getenv("JWT_SECRET")
+	if cfg.JWTSecret == "" {
+		panic(errors.New("JWT_SECRET is not set"))
+	}
 	return cfg
 }
 
@@ -84,3 +91,5 @@ func (c *Config) InitializedDB() {
 		&models.ExpenseCategories{},
 	)
 }
+
+var Envs = loadEnv(".env")

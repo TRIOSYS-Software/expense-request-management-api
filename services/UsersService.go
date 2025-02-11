@@ -1,9 +1,16 @@
 package services
 
 import (
+	"errors"
+	"fmt"
 	helper "shwetaik-expense-management-api/Helper"
+	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
+
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type UsersService struct {
@@ -37,4 +44,41 @@ func (u *UsersService) UpdateUser(user *models.Users) error {
 
 func (u *UsersService) DeleteUser(id uint) error {
 	return u.UsersRepo.DeleteUser(id)
+}
+
+func (u *UsersService) LoginUser(user *models.Users) (*struct {
+	User  models.Users
+	Token string
+}, error) {
+	getUser, err := u.UsersRepo.LoginUser(user)
+	if err != nil {
+		return nil, err
+	}
+	if !helper.CheckPasswordHash(user.Password, getUser.Password) {
+		fmt.Println("invalid password")
+		return nil, errors.New("invalid password")
+	}
+	claims := jwt.MapClaims{
+		"user_id":    getUser.ID,
+		"user_name":  getUser.Name,
+		"user_email": getUser.Email,
+		"user_role":  getUser.RoleID,
+		"exp":        time.Now().Add(time.Hour * 24).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(configs.Envs.JWTSecret))
+	if err != nil {
+		return nil, err
+	}
+
+	data := &struct {
+		User  models.Users
+		Token string
+	}{
+		User:  *getUser,
+		Token: tokenString,
+	}
+
+	return data, err
 }

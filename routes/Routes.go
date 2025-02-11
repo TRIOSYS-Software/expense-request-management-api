@@ -2,6 +2,7 @@ package routes
 
 import (
 	"shwetaik-expense-management-api/controllers"
+	"shwetaik-expense-management-api/middlewares"
 	"shwetaik-expense-management-api/repositories"
 	"shwetaik-expense-management-api/services"
 
@@ -39,8 +40,9 @@ func InitialRoute(e *echo.Echo, db *gorm.DB) {
 }
 
 func usersRoutes(e *echo.Group, controllers *controllers.UsersController) {
-	e.GET("/users", controllers.GetUsers)
+	e.GET("/users", controllers.GetUsers, middlewares.IsAuthenticated, middlewares.IsAdmin)
 	e.POST("/users", controllers.CreateUser)
+	e.POST("/login", controllers.LoginUser)
 	e.GET("/users/:id", controllers.GetUserByID)
 	e.PUT("/users/:id", controllers.UpdateUser)
 	e.DELETE("/users/:id", controllers.DeleteUser)

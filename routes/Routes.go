@@ -46,6 +46,7 @@ func usersRoutes(e *echo.Group, controllers *controllers.UsersController) {
 	e.GET("/users/:id", controllers.GetUserByID)
 	e.PUT("/users/:id", controllers.UpdateUser)
 	e.DELETE("/users/:id", controllers.DeleteUser)
+	e.POST("/verify", controllers.VerifyUser, middlewares.IsAuthenticated)
 }
 
 func departmentsRoutes(e *echo.Group, controllers *controllers.DepartmentsController) {

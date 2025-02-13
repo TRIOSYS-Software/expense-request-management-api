@@ -2,7 +2,6 @@ package services
 
 import (
 	"errors"
-	"fmt"
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/models"
@@ -55,7 +54,6 @@ func (u *UsersService) LoginUser(user *models.Users) (*struct {
 		return nil, err
 	}
 	if !helper.CheckPasswordHash(user.Password, getUser.Password) {
-		fmt.Println("invalid password")
 		return nil, errors.New("invalid password")
 	}
 	claims := jwt.MapClaims{

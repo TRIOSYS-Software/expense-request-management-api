@@ -21,10 +21,16 @@ func IsAuthenticated(next echo.HandlerFunc) echo.HandlerFunc {
 		if token == "" {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
-		_, err := validateToken(token)
-		if err != nil {
+		tsk, err := validateToken(token)
+		if err != nil || !tsk.Valid {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
+		claims, ok := tsk.Claims.(jwt.MapClaims)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		}
+
+		c.Set("user_id", claims["user_id"].(float64))
 		return next(c)
 	}
 }

@@ -83,3 +83,12 @@ func (u *UsersController) DeleteUser(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, "User deleted successfully")
 }
+
+func (u *UsersController) VerifyUser(c echo.Context) error {
+	user_id := c.Get("user_id")
+	user, err := u.UsersService.GetUserByID(uint(user_id.(float64)))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "invalid User!")
+	}
+	return c.JSON(http.StatusOK, user)
+}

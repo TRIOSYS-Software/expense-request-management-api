@@ -16,7 +16,7 @@ func NewUsersRepo(db *gorm.DB) *UsersRepo {
 
 func (u *UsersRepo) GetUsers() ([]models.Users, error) {
 	var users []models.Users
-	err := u.db.Model(&models.Users{}).Select("id, name, email, role_id, department_id, created_at, updated_at").Find(&users).Error
+	err := u.db.Preload("Roles").Preload("Departments").Model(&models.Users{}).Select("id, name, email, role_id, department_id, created_at, updated_at").Find(&users).Error
 	// err := u.db.Find(&users).Error
 	return users, err
 }

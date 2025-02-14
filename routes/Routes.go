@@ -37,6 +37,11 @@ func InitialRoute(e *echo.Echo, db *gorm.DB) {
 	expenseCategoriesService := services.NewExpenseCategoriesService(expenseCategoriesRepo)
 	expenseCategoriesController := controllers.NewExpenseCategoriesController(expenseCategoriesService)
 	expenseCategoriesRoutes(apiV1, expenseCategoriesController)
+
+	expenseRequestsRepo := repositories.NewExpenseRequestsRepo(db)
+	expenseRequestsService := services.NewExpenseRequestsService(expenseRequestsRepo)
+	expenseRequestsController := controllers.NewExpenseRequestsController(expenseRequestsService)
+	expenseRequestsRoutes(apiV1, expenseRequestsController)
 }
 
 func usersRoutes(e *echo.Group, controllers *controllers.UsersController) {
@@ -79,4 +84,10 @@ func expenseCategoriesRoutes(e *echo.Group, controllers *controllers.ExpenseCate
 	e.GET("/expense-categories/:id", controllers.GetExpenseCategoryByID)
 	e.PUT("/expense-categories/:id", controllers.UpdateExpenseCategory)
 	e.DELETE("/expense-categories/:id", controllers.DeleteExpenseCategory)
+}
+
+func expenseRequestsRoutes(e *echo.Group, controllers *controllers.ExpenseRequestsController) {
+	e.GET("/expense-requests", controllers.GetExpenseRequests)
+	e.POST("/expense-requests", controllers.CreateExpenseRequest)
+	e.GET("/expense-requests/:id", controllers.GetExpenseRequestByID)
 }

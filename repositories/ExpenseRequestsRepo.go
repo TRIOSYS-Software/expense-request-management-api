@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"fmt"
 	"shwetaik-expense-management-api/models"
 	"strconv"
 	"strings"
@@ -54,7 +55,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			}
 		}
 	} else {
-		approvalPolicy, err := r.FindHighestPolicy(*expenseRequest, requestUser.DepartmentID)
+		approvalPolicy, err := r.FindHighestPolicy(expenseRequest, requestUser.DepartmentID)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -80,12 +81,15 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 	return tx.Commit().Error
 }
 
-func (r *ExpenseRequestsRepo) FindHighestPolicy(request models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
-
+func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicies []models.ApprovalPolicies
 	err := r.db.Where("department_id = ? OR department_id IS NULL", departmentID).Find(&approvalPolicies).Error
 	if err != nil {
 		return nil, err
+	}
+
+	if len(approvalPolicies) == 0 {
+		return nil, fmt.Errorf("no approval policies found")
 	}
 	for _, approvalPolicy := range approvalPolicies {
 		switch approvalPolicy.ConditionType {
@@ -106,7 +110,7 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request models.ExpenseRequests, 
 			if err != nil {
 				return nil, err
 			}
-			if uint(conditionValue) == *request.CategoryID {
+			if request.CategoryID != nil && *request.CategoryID == uint(conditionValue) {
 				return &approvalPolicy, nil
 			}
 		case "amount":
@@ -115,13 +119,21 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request models.ExpenseRequests, 
 			}
 		}
 	}
-	return nil, nil
+	return nil, fmt.Errorf("no approval policies found")
 }
 
 func isAmountConditionMet(condition string, amount float64) bool {
-	// Example conditions: "> 1000", "<= 500", ">= 2000"
-	operator := condition[:1] // Extract first character (>, <, =)
-	value, _ := strconv.ParseFloat(condition[2:], 64)
+	condition = strings.TrimSpace(condition) // Remove unnecessary spaces
+	var operator string
+	var value float64
+
+	if strings.HasPrefix(condition, ">=") || strings.HasPrefix(condition, "<=") {
+		operator = condition[:2]
+		value, _ = strconv.ParseFloat(condition[2:], 64)
+	} else {
+		operator = condition[:1]
+		value, _ = strconv.ParseFloat(condition[1:], 64)
+	}
 
 	switch operator {
 	case ">":

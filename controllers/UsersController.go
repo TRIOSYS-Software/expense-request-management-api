@@ -62,7 +62,12 @@ func (u *UsersController) GetUserByID(c echo.Context) error {
 }
 
 func (u *UsersController) UpdateUser(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Invalid user id")
+	}
 	user := new(models.Users)
+	user.ID = uint(id)
 	if err := c.Bind(user); err != nil {
 		return c.JSON(http.StatusBadRequest, err)
 	}

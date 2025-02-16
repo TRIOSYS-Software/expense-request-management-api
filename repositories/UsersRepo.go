@@ -32,7 +32,10 @@ func (u *UsersRepo) CreateUser(user *models.Users) error {
 }
 
 func (u *UsersRepo) UpdateUser(user *models.Users) error {
-	return u.db.Save(user).Error
+	if err := u.db.Model(user).Updates(user).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 func (u *UsersRepo) DeleteUser(id uint) error {

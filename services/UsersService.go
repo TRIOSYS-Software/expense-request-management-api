@@ -38,6 +38,13 @@ func (u *UsersService) GetUserByID(id uint) (*models.Users, error) {
 }
 
 func (u *UsersService) UpdateUser(user *models.Users) error {
+	if user.Password != "" {
+		hashPassword, err := helper.HashPassword(user.Password)
+		if err != nil {
+			return err
+		}
+		user.Password = hashPassword
+	}
 	return u.UsersRepo.UpdateUser(user)
 }
 

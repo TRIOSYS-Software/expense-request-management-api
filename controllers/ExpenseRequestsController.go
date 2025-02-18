@@ -41,7 +41,7 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		return c.JSON(http.StatusBadRequest, err)
 	}
 	if err := ex.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, err.Error())
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
 }

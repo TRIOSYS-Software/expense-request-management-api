@@ -60,21 +60,36 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			tx.Rollback()
 			return err
 		}
-		approverRoles := strings.Split(approvalPolicy.ApproverRoles, ",")
+
+		var approverRoles []models.Roles
+		tx.Model(approvalPolicy).Association("ApproverRoles").Find(&approverRoles)
+
+		if len(approverRoles) == 0 {
+			tx.Rollback()
+			return fmt.Errorf("no approver roles found")
+		}
 
 		for i, approverRole := range approverRoles {
-			var approverUser models.Users
-			tx.Where("role_id = ?", approverRole).First(&approverUser)
-			expenseApprovals := models.ExpenseApprovals{
-				RequestID:  expenseRequest.ID,
-				ApproverID: approverUser.ID,
-				Level:      uint(i) + 1,
-				Status:     "pending",
-			}
-			if err := tx.Create(&expenseApprovals).Error; err != nil {
+			var approverUser []models.Users
+			tx.Where("role_id = ?", approverRole.ID).Find(&approverUser)
+
+			if len(approverUser) == 0 {
 				tx.Rollback()
-				return err
+				return fmt.Errorf("no approver users found")
 			}
+			for _, approver := range approverUser {
+				expenseApprovals := models.ExpenseApprovals{
+					RequestID:  expenseRequest.ID,
+					ApproverID: approver.ID,
+					Level:      uint(i) + 1,
+					Status:     "pending",
+				}
+				if err := tx.Create(&expenseApprovals).Error; err != nil {
+					tx.Rollback()
+					return err
+				}
+			}
+
 		}
 	}
 
@@ -85,6 +100,7 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests,
 	var approvalPolicies []models.ApprovalPolicies
 	err := r.db.Where("department_id = ? OR department_id IS NULL", departmentID).Find(&approvalPolicies).Error
 	if err != nil {
+		fmt.Println(err.Error())
 		return nil, err
 	}
 

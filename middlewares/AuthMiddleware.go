@@ -46,7 +46,7 @@ func IsAdmin(next echo.HandlerFunc) echo.HandlerFunc {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		claims, ok := t.Claims.(jwt.MapClaims)
-		if !ok || claims["user_role"] != 5.0 {
+		if !ok || claims["user_role"] != 1.0 {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		return next(c)

@@ -21,6 +21,14 @@ func (s *ExpenseRequestsService) GetExpenseRequestByID(id uint) (*models.Expense
 	return s.ExpenseRequestsRepo.GetExpenseRequestByID(id)
 }
 
+func (s *ExpenseRequestsService) GetExpenseRequestsByUserID(id uint) []models.ExpenseRequests {
+	return s.ExpenseRequestsRepo.GetExpenseRequestsByUserID(id)
+}
+
 func (s *ExpenseRequestsService) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
 	return s.ExpenseRequestsRepo.CreateExpenseRequest(expenseRequest)
+}
+
+func (s *ExpenseRequestsService) GetExpenseRequestByApproverID(id uint) []models.ExpenseRequests {
+	return s.ExpenseRequestsRepo.GetExpenseRequestByApproverID(id)
 }

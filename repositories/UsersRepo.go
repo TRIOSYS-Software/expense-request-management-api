@@ -27,6 +27,12 @@ func (u *UsersRepo) GetUserByID(id uint) (*models.Users, error) {
 	return &user, err
 }
 
+func (u *UsersRepo) GetUsersByRole(roleID uint) (*[]models.Users, error) {
+	var user []models.Users
+	err := u.db.Model(&models.Users{}).Preload("Roles").Preload("Departments").Select("id, name, email, role_id, department_id, created_at, updated_at").Find(&user, "role_id = ?", roleID).Error
+	return &user, err
+}
+
 func (u *UsersRepo) CreateUser(user *models.Users) error {
 	return u.db.Create(user).Error
 }
@@ -44,6 +50,6 @@ func (u *UsersRepo) DeleteUser(id uint) error {
 
 func (u *UsersRepo) LoginUser(user *models.Users) (*models.Users, error) {
 	var users models.Users
-	err := u.db.First(&users, "email = ?", user.Email).Error
+	err := u.db.Preload("Roles").Preload("Departments").First(&users, "email = ?", user.Email).Error
 	return &users, err
 }

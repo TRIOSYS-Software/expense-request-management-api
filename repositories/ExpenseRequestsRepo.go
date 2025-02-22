@@ -19,7 +19,9 @@ func NewExpenseRequestsRepo(db *gorm.DB) *ExpenseRequestsRepo {
 
 func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 	var expenseRequests []models.ExpenseRequests
-	r.db.Find(&expenseRequests)
+	r.db.Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id, name, email, role_id, department_id")
+	}).Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Find(&expenseRequests)
 	return expenseRequests
 }
 
@@ -27,6 +29,14 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 	var expenseRequest models.ExpenseRequests
 	err := r.db.First(&expenseRequest, id).Error
 	return &expenseRequest, err
+}
+
+func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.ExpenseRequests {
+	var expenseRequests []models.ExpenseRequests
+	r.db.Where("user_id = ?", id).Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id, name, email")
+	}).Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Find(&expenseRequests)
+	return expenseRequests
 }
 
 func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
@@ -61,44 +71,34 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
-		var approverRoles []models.Roles
-		tx.Model(approvalPolicy).Association("ApproverRoles").Find(&approverRoles)
+		fmt.Println(approvalPolicy)
 
-		if len(approverRoles) == 0 {
+		var approverUser []models.Users
+		tx.Model(&approvalPolicy).Association("Approver").Find(&approverUser)
+
+		if len(approverUser) == 0 {
 			tx.Rollback()
-			return fmt.Errorf("no approver roles found")
+			return fmt.Errorf("no approver users found")
 		}
-
-		for i, approverRole := range approverRoles {
-			var approverUser []models.Users
-			tx.Where("role_id = ?", approverRole.ID).Find(&approverUser)
-
-			if len(approverUser) == 0 {
+		for i, approver := range approverUser {
+			expenseApprovals := models.ExpenseApprovals{
+				RequestID:  expenseRequest.ID,
+				ApproverID: approver.ID,
+				Level:      uint(i) + 1,
+				Status:     "pending",
+			}
+			if err := tx.Create(&expenseApprovals).Error; err != nil {
 				tx.Rollback()
-				return fmt.Errorf("no approver users found")
+				return err
 			}
-			for _, approver := range approverUser {
-				expenseApprovals := models.ExpenseApprovals{
-					RequestID:  expenseRequest.ID,
-					ApproverID: approver.ID,
-					Level:      uint(i) + 1,
-					Status:     "pending",
-				}
-				if err := tx.Create(&expenseApprovals).Error; err != nil {
-					tx.Rollback()
-					return err
-				}
-			}
-
 		}
 	}
-
 	return tx.Commit().Error
 }
 
 func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicies []models.ApprovalPolicies
-	err := r.db.Where("department_id = ? OR department_id IS NULL", departmentID).Find(&approvalPolicies).Error
+	err := r.db.Where("department_id = ? OR department_id IS NULL", departmentID).Order("priority DESC").Find(&approvalPolicies).Error
 	if err != nil {
 		fmt.Println(err.Error())
 		return nil, err
@@ -110,7 +110,7 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests,
 	for _, approvalPolicy := range approvalPolicies {
 		switch approvalPolicy.ConditionType {
 		case "project":
-			if approvalPolicy.ConditionValue == *request.Project {
+			if request.Project != nil && approvalPolicy.ConditionValue == *request.Project {
 				return &approvalPolicy, nil
 			}
 		case "user":
@@ -142,13 +142,16 @@ func isAmountConditionMet(condition string, amount float64) bool {
 	condition = strings.TrimSpace(condition) // Remove unnecessary spaces
 	var operator string
 	var value float64
+	fmt.Println(condition)
 
 	if strings.HasPrefix(condition, ">=") || strings.HasPrefix(condition, "<=") {
 		operator = condition[:2]
-		value, _ = strconv.ParseFloat(condition[2:], 64)
+		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[2:]), 64)
+		fmt.Println(operator, value)
 	} else {
 		operator = condition[:1]
-		value, _ = strconv.ParseFloat(condition[1:], 64)
+		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[1:]), 64)
+		fmt.Println(operator, value)
 	}
 
 	switch operator {
@@ -164,4 +167,20 @@ func isAmountConditionMet(condition string, amount float64) bool {
 		return amount >= value
 	}
 	return false
+}
+
+func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.ExpenseRequests {
+	var expenseRequests []models.ExpenseRequests
+	r.db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+		Where("expense_approvals.approver_id = ?", id).
+		Preload("Approvals").
+		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id, name, email") // Select specific fields for Users
+		}).
+		Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id, name, email") // Select specific fields for User
+		}).
+		Preload("Category").
+		Find(&expenseRequests)
+	return expenseRequests
 }

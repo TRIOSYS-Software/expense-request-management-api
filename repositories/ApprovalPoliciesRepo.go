@@ -16,7 +16,7 @@ func NewApprovalPoliciesRepo(db *gorm.DB) *ApprovalPoliciesRepo {
 
 func (a *ApprovalPoliciesRepo) GetApprovalPolicies() ([]models.ApprovalPolicies, error) {
 	var approvalPolicies []models.ApprovalPolicies
-	err := a.db.Preload("ApproverRoles").Preload("Departments").Find(&approvalPolicies).Error
+	err := a.db.Preload("Approver").Preload("Departments").Find(&approvalPolicies).Error
 	return approvalPolicies, err
 }
 
@@ -47,7 +47,7 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicy *mod
 		return err
 	}
 
-	if err := tx.Model(&approvalPolicy).Association("ApproverRoles").Replace(approvalPolicy.ApproverRoles); err != nil {
+	if err := tx.Model(&approvalPolicy).Association("Approver").Replace(approvalPolicy.Approver); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -57,11 +57,11 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicy *mod
 
 func (a *ApprovalPoliciesRepo) DeleteApprovalPolicy(id uint) error {
 	var approvalPolicy models.ApprovalPolicies
-	if err := a.db.Preload("ApproverRoles").First(&approvalPolicy, id).Error; err != nil {
+	if err := a.db.First(&approvalPolicy, id).Error; err != nil {
 		return err
 	}
 
-	if err := a.db.Model(&approvalPolicy).Association("ApproverRoles").Clear(); err != nil {
+	if err := a.db.Model(&approvalPolicy).Association("Approver").Clear(); err != nil {
 		return err
 	}
 

@@ -35,6 +35,16 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error
 	return c.JSON(http.StatusOK, expenseRequest)
 }
 
+func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) error {
+	id := c.Param("id")
+	i, err := strconv.Atoi(id)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Invalid user id")
+	}
+	expenseRequests := ex.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i))
+	return c.JSON(http.StatusOK, expenseRequests)
+}
+
 func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error {
 	expenseRequest := new(models.ExpenseRequests)
 	if err := c.Bind(expenseRequest); err != nil {
@@ -44,4 +54,14 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		return c.JSON(http.StatusNotFound, err.Error())
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
+}
+
+func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Context) error {
+	id := c.Param("id")
+	i, err := strconv.Atoi(id)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Invalid user id")
+	}
+	expenseRequests := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i))
+	return c.JSON(http.StatusOK, expenseRequests)
 }

@@ -25,6 +25,19 @@ func (u *UsersController) GetUsers(c echo.Context) error {
 	return c.JSON(http.StatusOK, users)
 }
 
+func (u *UsersController) GetUsersByRole(c echo.Context) error {
+	roleID := c.Param("role_id")
+	i, err := strconv.Atoi(roleID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Invalid role id")
+	}
+	user, err := u.UsersService.GetUsersByRole(uint(i))
+	if err != nil {
+		return c.JSON(http.StatusNotFound, err)
+	}
+	return c.JSON(http.StatusOK, user)
+}
+
 func (u *UsersController) LoginUser(c echo.Context) error {
 	user := new(models.Users)
 	if err := c.Bind(user); err != nil {

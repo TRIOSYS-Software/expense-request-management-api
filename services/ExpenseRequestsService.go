@@ -25,6 +25,10 @@ func (s *ExpenseRequestsService) GetExpenseRequestsByUserID(id uint) []models.Ex
 	return s.ExpenseRequestsRepo.GetExpenseRequestsByUserID(id)
 }
 
+func (s *ExpenseRequestsService) GetExpenseRequestsSummary(filters map[string]any) (map[string]any, error) {
+	return s.ExpenseRequestsRepo.GetExpenseRequestsSummary(filters)
+}
+
 func (s *ExpenseRequestsService) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
 	return s.ExpenseRequestsRepo.CreateExpenseRequest(expenseRequest)
 }

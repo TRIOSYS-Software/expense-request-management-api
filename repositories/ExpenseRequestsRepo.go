@@ -21,7 +21,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 	var expenseRequests []models.ExpenseRequests
 	r.db.Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email, role_id, department_id")
-	}).Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Find(&expenseRequests)
+	}).Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Order("expense_requests.created_at DESC").Find(&expenseRequests)
 	return expenseRequests
 }
 
@@ -35,8 +35,63 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.Expen
 	var expenseRequests []models.ExpenseRequests
 	r.db.Where("user_id = ?", id).Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email")
-	}).Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Find(&expenseRequests)
+	}).Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Order("expense_requests.created_at DESC").Find(&expenseRequests)
 	return expenseRequests
+}
+
+func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (map[string]any, error) {
+	var expenseRequests []models.ExpenseRequests
+	var summary = make(map[string]any)
+
+	db := r.db.Model(&models.ExpenseRequests{}).Preload("Approvals")
+	if filters["user_id"] != nil {
+		db = db.Where("user_id = ?", filters["user_id"])
+	}
+	if filters["status"] != nil {
+		db = db.Where("expense_requests.status = ?", filters["status"].(string))
+	}
+	if filters["category_id"] != nil {
+		db = db.Where("category_id = ?", filters["category_id"])
+	}
+
+	if filters["start_date"] != nil && filters["end_date"] != nil {
+		db = db.Where("date_submitted BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
+		summary["daily_totals"] = make(map[string]float64)
+	}
+
+	if filters["amount"] != nil {
+		db = db.Where("amount = ?", filters["amount"])
+	}
+
+	if filters["approver_id"] != nil {
+		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+			Where("expense_approvals.approver_id = ?", filters["approver_id"])
+	}
+
+	db.Find(&expenseRequests)
+
+	summary["total"] = len(expenseRequests)
+	summary["pending"] = 0
+	summary["approved"] = 0
+	summary["rejected"] = 0
+	summary["total_amount"] = 0.00
+
+	for _, expenseRequest := range expenseRequests {
+		summary["total_amount"] = summary["total_amount"].(float64) + expenseRequest.Amount
+		if expenseRequest.Status == "pending" {
+			summary["pending"] = summary["pending"].(int) + 1
+		} else if expenseRequest.Status == "approved" {
+			summary["approved"] = summary["approved"].(int) + 1
+		} else if expenseRequest.Status == "rejected" {
+			summary["rejected"] = summary["rejected"].(int) + 1
+		}
+
+		if filters["start_date"] != nil && filters["end_date"] != nil {
+			date := expenseRequest.DateSubmitted.Format("2006-01-02")
+			summary["daily_totals"].(map[string]float64)[date] = summary["daily_totals"].(map[string]float64)[date] + expenseRequest.Amount
+		}
+	}
+	return summary, nil
 }
 
 func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
@@ -180,7 +235,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 		Preload("User", func(db *gorm.DB) *gorm.DB {
 			return db.Select("id, name, email") // Select specific fields for User
 		}).
-		Preload("Category").
+		Preload("Category").Order("expense_requests.created_at DESC").
 		Find(&expenseRequests)
 	return expenseRequests
 }

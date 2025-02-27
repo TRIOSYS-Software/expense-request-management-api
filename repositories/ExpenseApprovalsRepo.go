@@ -1,7 +1,6 @@
 package repositories
 
 import (
-	"fmt"
 	"shwetaik-expense-management-api/models"
 
 	"gorm.io/gorm"
@@ -49,10 +48,8 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 	}
 
 	if expenseApproval.Status == "approved" {
-		fmt.Println("expense request approvals :", expenseRequest.Approvals)
 		expenseRequest.CurrentApproverLevel += 1
 		totalApprovals := uint(len(expenseRequest.Approvals))
-		fmt.Print(totalApprovals)
 		if expenseRequest.CurrentApproverLevel > totalApprovals {
 			expenseRequest.Status = "approved"
 		}

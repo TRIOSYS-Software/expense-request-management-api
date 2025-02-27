@@ -5,6 +5,7 @@ import (
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -43,6 +44,60 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 	}
 	expenseRequests := ex.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i))
 	return c.JSON(http.StatusOK, expenseRequests)
+}
+
+func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) error {
+	filters := make(map[string]any)
+	if c.QueryParam("start_date") != "" {
+		startDate, err := time.Parse("2006-01-02", c.QueryParam("start_date"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid start date")
+		}
+		filters["start_date"] = startDate
+	}
+
+	if c.QueryParam("end_date") != "" {
+		endDate, err := time.Parse("2006-01-02", c.QueryParam("end_date"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid end date")
+		}
+		filters["end_date"] = endDate
+	}
+
+	if c.QueryParam("category_id") != "" {
+		categoryID, err := strconv.Atoi(c.QueryParam("category_id"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid category ID")
+		}
+		filters["category_id"] = uint(categoryID)
+	}
+
+	if c.QueryParam("user_id") != "" {
+		userID, err := strconv.Atoi(c.QueryParam("user_id"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid user ID")
+		}
+		filters["user_id"] = uint(userID)
+	}
+
+	if c.QueryParam("approver_id") != "" {
+		approverID, err := strconv.Atoi(c.QueryParam("approver_id"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid approver ID")
+		}
+		filters["approver_id"] = uint(approverID)
+	}
+
+	if c.QueryParam("status") != "" {
+		status := c.QueryParam("status")
+		filters["status"] = status
+	}
+
+	summary, err := ex.ExpenseRequestsService.GetExpenseRequestsSummary(filters)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, err)
+	}
+	return c.JSON(http.StatusOK, summary)
 }
 
 func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error {

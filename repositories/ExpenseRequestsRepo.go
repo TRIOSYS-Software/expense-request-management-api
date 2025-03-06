@@ -121,7 +121,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			}
 		}
 	} else {
-		approvalPolicy, err := r.FindHighestPolicy(expenseRequest, requestUser.DepartmentID)
+		approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
 		if err != nil {
 			tx.Rollback()
 			return err

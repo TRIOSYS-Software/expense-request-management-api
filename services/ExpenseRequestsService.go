@@ -89,7 +89,7 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 		return err
 	}
 
-	req, err := http.NewRequest("POST", "http://localhost:1323/api/v1/payments", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, "/payments"), bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}

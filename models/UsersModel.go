@@ -10,7 +10,7 @@ type Users struct {
 	Email            string              `json:"email,omitempty" gorm:"unique;not null"`
 	Password         string              `json:"password,omitempty" gorm:"not null"`
 	RoleID           uint                `json:"role,omitempty" gorm:"not null"`
-	DepartmentID     uint                `json:"department,omitempty" gorm:"not null"`
+	DepartmentID     *uint               `json:"department,omitempty" gorm:"nullable"`
 	CreatedAt        time.Time           `json:"-" gorm:"autoCreateTime;not null"`
 	UpdatedAt        time.Time           `json:"-" gorm:"autoUpdateTime;not null"`
 	Roles            *Roles              `json:"roles,omitempty" gorm:"foreignKey:RoleID;references:ID"`

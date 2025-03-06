@@ -23,6 +23,7 @@ type Config struct {
 	JWTSecret           string
 	SQLACC_API_PASSWORD string
 	SQLACC_API_KEY      string
+	SQLACC_API_URL      string
 }
 
 func loadEnv(env string) *Config {
@@ -78,6 +79,10 @@ func loadEnv(env string) *Config {
 	if cfg.SQLACC_API_KEY == "" {
 		panic(errors.New("SQLACC_API_KEY is not set"))
 	}
+	cfg.SQLACC_API_URL = os.Getenv("SQLACC_API_URL")
+	if cfg.SQLACC_API_URL == "" {
+		panic(errors.New("SQLACC_API_URL is not set"))
+	}
 	return cfg
 }
 
@@ -93,20 +98,6 @@ func (c *Config) ConnectDB() error {
 }
 
 func (c *Config) InitializedDB() {
-	adminUser := models.Users{
-		Name:     "Admin",
-		Email:    "admin@example.com",
-		Password: "admin",
-		RoleID:   1,
-	}
-
-	hashPassword, err := helper.HashPassword(adminUser.Password)
-	if err != nil {
-		panic(err)
-	}
-	adminUser.Password = hashPassword
-
-	c.DB.Create(&adminUser)
 	c.DB.AutoMigrate(
 		&models.Users{},
 		&models.ExpenseRequests{},
@@ -117,6 +108,36 @@ func (c *Config) InitializedDB() {
 		&models.Departments{},
 		&models.ExpenseCategories{},
 	)
+
+	var role models.Roles
+	c.DB.First(&role, "name = ?", "Admin")
+	if role.ID == 0 {
+		roles := []models.Roles{
+			{Name: "Admin"},
+			{Name: "Approver"},
+			{Name: "Staff"},
+		}
+		c.DB.Create(&roles)
+	}
+
+	var count int64
+	c.DB.Model(&models.Users{}).Where("name = ?", "Admin").Count(&count)
+	if count == 0 {
+		adminUser := models.Users{
+			Name:     "Admin",
+			Email:    "admin@example.com",
+			Password: "admin",
+			RoleID:   1,
+		}
+
+		hashPassword, err := helper.HashPassword(adminUser.Password)
+		if err != nil {
+			panic(err)
+		}
+		adminUser.Password = hashPassword
+
+		c.DB.Create(&adminUser)
+	}
 }
 
 var Envs = loadEnv(".env")

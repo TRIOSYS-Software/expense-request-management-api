@@ -10,6 +10,7 @@ type ExpenseApprovals struct {
 	Status       string     `json:"status,omitempty" gorm:"not null;type:enum('pending', 'approved', 'rejected')"`
 	Comments     *string    `json:"comments" gorm:"nullable"`
 	ApprovalDate *time.Time `json:"approval_date" gorm:"nullable"`
+	IsFinal      bool       `json:"is_final" gorm:"not null;default:false"`
 	// ExpenseRequests ExpenseRequests `json:"expense_requests,omitempty" gorm:"foreignKey:RequestID;references:ID"`
 	Users Users `json:"users,omitempty" gorm:"foreignKey:ApproverID;references:ID"`
 }

@@ -27,7 +27,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseRequests, error) {
 	var expenseRequest models.ExpenseRequests
-	err := r.db.First(&expenseRequest, id).Error
+	err := r.db.Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).First(&expenseRequest, id).Error
 	return &expenseRequest, err
 }
 
@@ -113,6 +113,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 				ApproverID: approverUser.ID,
 				Level:      uint(i) + 1,
 				Status:     "pending",
+				IsFinal:    i == len(approvers)-1,
 			}
 			if err := tx.Create(&expenseApprovals).Error; err != nil {
 				tx.Rollback()
@@ -141,6 +142,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 				ApproverID: approver.ID,
 				Level:      uint(i) + 1,
 				Status:     "pending",
+				IsFinal:    i == len(approverUser)-1,
 			}
 			if err := tx.Create(&expenseApprovals).Error; err != nil {
 				tx.Rollback()
@@ -238,4 +240,8 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 		Preload("Category").Order("expense_requests.created_at DESC").
 		Find(&expenseRequests)
 	return expenseRequests
+}
+
+func (r *ExpenseRequestsRepo) UpdateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
+	return r.db.Save(expenseRequest).Error
 }

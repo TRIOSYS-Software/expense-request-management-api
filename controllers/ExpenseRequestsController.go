@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
 	"strconv"
@@ -119,4 +121,16 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	}
 	expenseRequests := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i))
 	return c.JSON(http.StatusOK, expenseRequests)
+}
+
+func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) error {
+	expenseRequestDTO := new(dtos.ApprovedExpenseRequestsDTO)
+	if err := c.Bind(expenseRequestDTO); err != nil {
+		return c.JSON(http.StatusBadRequest, "invalid request payload")
+	}
+	fmt.Println(expenseRequestDTO)
+	if err := ex.ExpenseRequestsService.SendExpenseRequestToSQLACC(expenseRequestDTO); err != nil {
+		return c.JSON(http.StatusNotFound, err.Error())
+	}
+	return c.JSON(http.StatusOK, expenseRequestDTO)
 }

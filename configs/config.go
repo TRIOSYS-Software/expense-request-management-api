@@ -11,15 +11,17 @@ import (
 )
 
 type Config struct {
-	ServerIP   string
-	ServerPort string
-	DBUser     string
-	DBPassword string
-	DBHost     string
-	DBPort     string
-	DBName     string
-	DB         *gorm.DB
-	JWTSecret  string
+	ServerIP            string
+	ServerPort          string
+	DBUser              string
+	DBPassword          string
+	DBHost              string
+	DBPort              string
+	DBName              string
+	DB                  *gorm.DB
+	JWTSecret           string
+	SQLACC_API_PASSWORD string
+	SQLACC_API_KEY      string
 }
 
 func loadEnv(env string) *Config {
@@ -64,6 +66,16 @@ func loadEnv(env string) *Config {
 	cfg.JWTSecret = os.Getenv("JWT_SECRET")
 	if cfg.JWTSecret == "" {
 		panic(errors.New("JWT_SECRET is not set"))
+	}
+
+	cfg.SQLACC_API_PASSWORD = os.Getenv("SQLACC_API_PASSWORD")
+	if cfg.SQLACC_API_PASSWORD == "" {
+		panic(errors.New("SQLACC_API_PASSWORD is not set"))
+	}
+
+	cfg.SQLACC_API_KEY = os.Getenv("SQLACC_API_KEY")
+	if cfg.SQLACC_API_KEY == "" {
+		panic(errors.New("SQLACC_API_KEY is not set"))
 	}
 	return cfg
 }

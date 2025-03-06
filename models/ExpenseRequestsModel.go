@@ -15,6 +15,7 @@ type ExpenseRequests struct {
 	UpdatedAt            time.Time          `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
 	Status               string             `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected');not null;default:'pending'"`
 	CurrentApproverLevel uint               `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
+	IsSendToSQLACC       bool               `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
 	Approvals            []ExpenseApprovals `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
 	Category             ExpenseCategories  `json:"category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	User                 Users              `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`

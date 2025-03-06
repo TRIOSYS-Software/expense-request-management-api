@@ -99,6 +99,7 @@ func expenseRequestsRoutes(e *echo.Group, controllers *controllers.ExpenseReques
 	e.GET("/expense-requests/user/:id", controllers.GetExpenseRequestsByUserID, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/approver/:id", controllers.GetExpenseRequestByApproverID, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/summary", controllers.GetExpenseRequestsSummary, middlewares.IsAuthenticated)
+	e.POST("/expense-requests/send-to-sqlacc", controllers.SendExpenseRequestToSQLACC, middlewares.IsAuthenticated)
 }
 
 func expenseApprovalsRoutes(e *echo.Group, controllers *controllers.ExpenseApprovalsController) {

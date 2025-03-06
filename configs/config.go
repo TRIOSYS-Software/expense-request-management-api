@@ -3,6 +3,7 @@ package configs
 import (
 	"errors"
 	"os"
+	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/models"
 
 	"github.com/joho/godotenv"
@@ -92,6 +93,20 @@ func (c *Config) ConnectDB() error {
 }
 
 func (c *Config) InitializedDB() {
+	adminUser := models.Users{
+		Name:     "Admin",
+		Email:    "admin@example.com",
+		Password: "admin",
+		RoleID:   1,
+	}
+
+	hashPassword, err := helper.HashPassword(adminUser.Password)
+	if err != nil {
+		panic(err)
+	}
+	adminUser.Password = hashPassword
+
+	c.DB.Create(&adminUser)
 	c.DB.AutoMigrate(
 		&models.Users{},
 		&models.ExpenseRequests{},

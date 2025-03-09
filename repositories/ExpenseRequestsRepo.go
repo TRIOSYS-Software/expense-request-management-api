@@ -259,6 +259,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		old_expenseRequest.CategoryID = expenseRequest.CategoryID
 		old_expenseRequest.Amount = expenseRequest.Amount
 		old_expenseRequest.Description = expenseRequest.Description
+		old_expenseRequest.CurrentApproverLevel = 1
 
 		if err := tx.Save(&old_expenseRequest).Error; err != nil {
 			tx.Rollback()

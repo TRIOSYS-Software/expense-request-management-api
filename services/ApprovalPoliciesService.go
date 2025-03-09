@@ -1,6 +1,7 @@
 package services
 
 import (
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
 )
@@ -21,12 +22,12 @@ func (s *ApprovalPoliciesService) GetApprovalPolicyByID(id uint) (*models.Approv
 	return s.repo.GetApprovalPolicyByID(id)
 }
 
-func (s *ApprovalPoliciesService) CreateApprovalPolicy(approvalPolicy *models.ApprovalPolicies) error {
-	return s.repo.CreateApprovalPolicy(approvalPolicy)
+func (s *ApprovalPoliciesService) CreateApprovalPolicy(approvalPolicyDTO *dtos.ApprovalPolicyRequestDTO) error {
+	return s.repo.CreateApprovalPolicy(approvalPolicyDTO)
 }
 
-func (s *ApprovalPoliciesService) UpdateApprovalPolicy(id uint, approvalPolicy *models.ApprovalPolicies) error {
-	return s.repo.UpdateApprovalPolicy(id, approvalPolicy)
+func (s *ApprovalPoliciesService) UpdateApprovalPolicy(id uint, approvalPolicyDTO *dtos.ApprovalPolicyRequestDTO) error {
+	return s.repo.UpdateApprovalPolicy(id, approvalPolicyDTO)
 }
 
 func (s *ApprovalPoliciesService) DeleteApprovalPolicy(id uint) error {

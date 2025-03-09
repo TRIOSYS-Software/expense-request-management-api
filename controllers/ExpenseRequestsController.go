@@ -134,3 +134,18 @@ func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) 
 	}
 	return c.JSON(http.StatusOK, expenseRequestDTO)
 }
+
+func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+	}
+	expenseRequest := new(models.ExpenseRequests)
+	if err := c.Bind(expenseRequest); err != nil {
+		return c.JSON(http.StatusBadRequest, err)
+	}
+	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {
+		return c.JSON(http.StatusNotFound, err)
+	}
+	return c.JSON(http.StatusOK, expenseRequest)
+}

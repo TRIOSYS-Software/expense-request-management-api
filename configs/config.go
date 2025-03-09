@@ -107,6 +107,7 @@ func (c *Config) InitializedDB() {
 		&models.Roles{},
 		&models.Departments{},
 		&models.ExpenseCategories{},
+		&models.ApprovalPoliciesUsers{},
 	)
 
 	var role models.Roles

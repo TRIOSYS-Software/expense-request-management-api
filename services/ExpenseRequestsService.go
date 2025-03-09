@@ -44,8 +44,8 @@ func (s *ExpenseRequestsService) GetExpenseRequestByApproverID(id uint) []models
 	return s.ExpenseRequestsRepo.GetExpenseRequestByApproverID(id)
 }
 
-func (s *ExpenseRequestsService) UpdateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
-	return s.ExpenseRequestsRepo.UpdateExpenseRequest(expenseRequest)
+func (s *ExpenseRequestsService) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {
+	return s.ExpenseRequestsRepo.UpdateExpenseRequest(id, expenseRequest)
 }
 
 func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(expenseRequestDTO *dtos.ApprovedExpenseRequestsDTO) error {
@@ -58,7 +58,7 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(expenseRequestDTO *d
 			return err
 		}
 		expenseRequest.IsSendToSQLACC = true
-		if err := s.UpdateExpenseRequest(expenseRequest); err != nil {
+		if err := s.UpdateExpenseRequest(expenseRequest.ID, expenseRequest); err != nil {
 			return err
 		}
 	}

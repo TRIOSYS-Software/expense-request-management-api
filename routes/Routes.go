@@ -95,6 +95,7 @@ func expenseCategoriesRoutes(e *echo.Group, controllers *controllers.ExpenseCate
 func expenseRequestsRoutes(e *echo.Group, controllers *controllers.ExpenseRequestsController) {
 	e.GET("/expense-requests", controllers.GetExpenseRequests, middlewares.IsAuthenticated)
 	e.POST("/expense-requests", controllers.CreateExpenseRequest, middlewares.IsAuthenticated)
+	e.PUT("/expense-requests/:id", controllers.UpdateExpenseRequest, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/:id", controllers.GetExpenseRequestByID, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/user/:id", controllers.GetExpenseRequestsByUserID, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/approver/:id", controllers.GetExpenseRequestByApproverID, middlewares.IsAuthenticated)

@@ -127,22 +127,24 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
-		fmt.Println(approvalPolicy)
+		fmt.Println("approval policy", approvalPolicy)
 
-		var approverUser []models.Users
-		tx.Model(&approvalPolicy).Association("Approver").Find(&approverUser)
+		var approvalPoliciesUsers []models.ApprovalPoliciesUsers
+		tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers)
 
-		if len(approverUser) == 0 {
+		if len(approvalPoliciesUsers) == 0 {
 			tx.Rollback()
 			return fmt.Errorf("no approver users found")
 		}
-		for i, approver := range approverUser {
+
+		for i, approverPolicyUser := range approvalPoliciesUsers {
+			fmt.Println("approver", approverPolicyUser, i)
 			expenseApprovals := models.ExpenseApprovals{
 				RequestID:  expenseRequest.ID,
-				ApproverID: approver.ID,
-				Level:      uint(i) + 1,
+				ApproverID: approverPolicyUser.UserID,
+				Level:      approverPolicyUser.Level,
 				Status:     "pending",
-				IsFinal:    i == len(approverUser)-1,
+				IsFinal:    i == len(approvalPoliciesUsers)-1,
 			}
 			if err := tx.Create(&expenseApprovals).Error; err != nil {
 				tx.Rollback()
@@ -199,16 +201,13 @@ func isAmountConditionMet(condition string, amount float64) bool {
 	condition = strings.TrimSpace(condition) // Remove unnecessary spaces
 	var operator string
 	var value float64
-	fmt.Println(condition)
 
 	if strings.HasPrefix(condition, ">=") || strings.HasPrefix(condition, "<=") {
 		operator = condition[:2]
 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[2:]), 64)
-		fmt.Println(operator, value)
 	} else {
 		operator = condition[:1]
 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[1:]), 64)
-		fmt.Println(operator, value)
 	}
 
 	switch operator {
@@ -242,6 +241,72 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 	return expenseRequests
 }
 
-func (r *ExpenseRequestsRepo) UpdateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
-	return r.db.Save(expenseRequest).Error
+func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {
+	tx := r.db.Begin()
+
+	var old_expenseRequest models.ExpenseRequests
+	if err := tx.First(&old_expenseRequest, id).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	old_expenseRequest.IsSendToSQLACC = expenseRequest.IsSendToSQLACC
+	old_expenseRequest.Description = expenseRequest.Description
+
+	if old_expenseRequest.CategoryID != expenseRequest.CategoryID && old_expenseRequest.Project != expenseRequest.Project && old_expenseRequest.Amount != expenseRequest.Amount {
+
+		old_expenseRequest.Project = expenseRequest.Project
+		old_expenseRequest.CategoryID = expenseRequest.CategoryID
+		old_expenseRequest.Amount = expenseRequest.Amount
+		old_expenseRequest.Description = expenseRequest.Description
+
+		if err := tx.Save(&old_expenseRequest).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		if err := tx.Where("request_id = ?", old_expenseRequest.ID).Delete(&models.ExpenseApprovals{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		var requestUser models.Users
+		tx.Where("id = ?", expenseRequest.UserID).First(&requestUser)
+
+		approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		var approvalPoliciesUsers []models.ApprovalPoliciesUsers
+		tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers)
+
+		if len(approvalPoliciesUsers) == 0 {
+			tx.Rollback()
+			return fmt.Errorf("no approver users found")
+		}
+
+		for i, approverPolicyUser := range approvalPoliciesUsers {
+			fmt.Println("approver", approverPolicyUser, i)
+			expenseApprovals := models.ExpenseApprovals{
+				RequestID:  old_expenseRequest.ID,
+				ApproverID: approverPolicyUser.UserID,
+				Level:      approverPolicyUser.Level,
+				Status:     "pending",
+				IsFinal:    i == len(approvalPoliciesUsers)-1,
+			}
+			if err := tx.Create(&expenseApprovals).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	if err := tx.Save(&old_expenseRequest).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }

@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"net/http"
-	"shwetaik-expense-management-api/models"
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/services"
 	"strconv"
 
@@ -39,14 +39,15 @@ func (u *ApprovalPoliciesController) GetApprovalPolicyByID(c echo.Context) error
 }
 
 func (u *ApprovalPoliciesController) CreateApprovalPolicy(c echo.Context) error {
-	approvalPolicy := new(models.ApprovalPolicies)
-	if err := c.Bind(approvalPolicy); err != nil {
+	approvalPolicyDTO := new(dtos.ApprovalPolicyRequestDTO)
+	if err := c.Bind(approvalPolicyDTO); err != nil {
 		return c.JSON(http.StatusBadRequest, err)
 	}
-	if err := u.approvalPoliciesService.CreateApprovalPolicy(approvalPolicy); err != nil {
+
+	if err := u.approvalPoliciesService.CreateApprovalPolicy(approvalPolicyDTO); err != nil {
 		return c.JSON(http.StatusInternalServerError, err)
 	}
-	return c.JSON(http.StatusOK, approvalPolicy)
+	return c.JSON(http.StatusOK, approvalPolicyDTO)
 }
 
 func (u *ApprovalPoliciesController) UpdateApprovalPolicy(c echo.Context) error {
@@ -54,14 +55,14 @@ func (u *ApprovalPoliciesController) UpdateApprovalPolicy(c echo.Context) error 
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Invalid approval policy id")
 	}
-	approvalPolicy := new(models.ApprovalPolicies)
-	if err := c.Bind(approvalPolicy); err != nil {
+	approvalPolicyDTO := new(dtos.ApprovalPolicyRequestDTO)
+	if err := c.Bind(approvalPolicyDTO); err != nil {
 		return c.JSON(http.StatusBadRequest, err)
 	}
-	if err := u.approvalPoliciesService.UpdateApprovalPolicy(uint(id), approvalPolicy); err != nil {
+	if err := u.approvalPoliciesService.UpdateApprovalPolicy(uint(id), approvalPolicyDTO); err != nil {
 		return c.JSON(http.StatusInternalServerError, err)
 	}
-	return c.JSON(http.StatusOK, approvalPolicy)
+	return c.JSON(http.StatusOK, approvalPolicyDTO)
 }
 
 func (u *ApprovalPoliciesController) DeleteApprovalPolicy(c echo.Context) error {

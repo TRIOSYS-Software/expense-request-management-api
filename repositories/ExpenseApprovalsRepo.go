@@ -62,7 +62,6 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 	expenseApprovalToUpdate.Status = expenseApproval.Status
 	expenseApprovalToUpdate.Comments = expenseApproval.Comments
 	expenseApprovalToUpdate.ApprovalDate = expenseApproval.ApprovalDate
-	expenseApprovalToUpdate.Level = expenseApproval.Level
 
 	if err := tx.Save(&expenseApprovalToUpdate).Error; err != nil {
 		tx.Rollback()

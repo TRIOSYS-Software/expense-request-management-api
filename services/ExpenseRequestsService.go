@@ -89,7 +89,9 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 		return err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, "/payments"), bytes.NewBuffer(jsonData))
+	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, "payments")
+
+	req, err := http.NewRequest("POST", api, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
@@ -101,8 +103,6 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 		return err
 	}
 	defer resp.Body.Close()
-
-	fmt.Println(resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API call failed with status code: %d", resp.StatusCode)

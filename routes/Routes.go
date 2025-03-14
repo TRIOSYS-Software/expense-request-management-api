@@ -101,6 +101,8 @@ func expenseRequestsRoutes(e *echo.Group, controllers *controllers.ExpenseReques
 	e.GET("/expense-requests/approver/:id", controllers.GetExpenseRequestByApproverID, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/summary", controllers.GetExpenseRequestsSummary, middlewares.IsAuthenticated)
 	e.POST("/expense-requests/send-to-sqlacc", controllers.SendExpenseRequestToSQLACC, middlewares.IsAuthenticated)
+	e.DELETE("/expense-requests/:id", controllers.DeleteExpenseRequest, middlewares.IsAuthenticated)
+	e.GET("/expense-requests/attachment/:filename", controllers.ServeExpenseRequestAttachment)
 }
 
 func expenseApprovalsRoutes(e *echo.Group, controllers *controllers.ExpenseApprovalsController) {

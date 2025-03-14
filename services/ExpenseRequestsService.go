@@ -71,12 +71,12 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 		"DOCTYPE":       "PV",
 		"DESCRIPTION":   expenseRequest.Description,
 		"PAYMENTMETHOD": paymentMethod,
-		"PROJECT":       *expenseRequest.Project,
+		"PROJECT":       expenseRequest.Project,
 		"DETAILS": []map[string]any{
 			{
 				"CODE":           paymentMethod,
 				"DESCRIPTION":    expenseRequest.Description,
-				"PROJECT":        *expenseRequest.Project,
+				"PROJECT":        expenseRequest.Project,
 				"AMOUNT":         expenseRequest.Amount,
 				"LOCALAMOUNT":    expenseRequest.Amount,
 				"CURRENCYAMOUNT": expenseRequest.Amount,
@@ -117,4 +117,8 @@ func getToken() string {
 		panic(err)
 	}
 	return token
+}
+
+func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {
+	return s.ExpenseRequestsRepo.DeleteExpenseRequest(id)
 }

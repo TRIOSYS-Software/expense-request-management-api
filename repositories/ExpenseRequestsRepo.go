@@ -2,6 +2,8 @@ package repositories
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"shwetaik-expense-management-api/models"
 	"strconv"
 	"strings"
@@ -169,7 +171,7 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests,
 	for _, approvalPolicy := range approvalPolicies {
 		switch approvalPolicy.ConditionType {
 		case "project":
-			if request.Project != nil && approvalPolicy.ConditionValue == *request.Project {
+			if approvalPolicy.ConditionValue == request.Project {
 				return &approvalPolicy, nil
 			}
 		case "user":
@@ -185,7 +187,7 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests,
 			if err != nil {
 				return nil, err
 			}
-			if request.CategoryID != nil && *request.CategoryID == uint(conditionValue) {
+			if request.CategoryID == uint(conditionValue) {
 				return &approvalPolicy, nil
 			}
 		case "amount":
@@ -253,6 +255,14 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	old_expenseRequest.IsSendToSQLACC = expenseRequest.IsSendToSQLACC
 	old_expenseRequest.Description = expenseRequest.Description
 
+	if expenseRequest.Attachment != "" {
+		oldFilePath := filepath.Join("uploads", old_expenseRequest.Attachment)
+		if _, err := os.Stat(oldFilePath); err == nil {
+			os.Remove(oldFilePath)
+		}
+		old_expenseRequest.Attachment = expenseRequest.Attachment
+	}
+
 	if old_expenseRequest.CategoryID != expenseRequest.CategoryID && old_expenseRequest.Project != expenseRequest.Project && old_expenseRequest.Amount != expenseRequest.Amount {
 
 		old_expenseRequest.Project = expenseRequest.Project
@@ -309,5 +319,18 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		return err
 	}
 
+	return tx.Commit().Error
+}
+
+func (r *ExpenseRequestsRepo) DeleteExpenseRequest(id uint) error {
+	tx := r.db.Begin()
+	if err := tx.Where("request_id = ?", id).Delete(&models.ExpenseApprovals{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Where("id = ?", id).Delete(&models.ExpenseRequests{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
 	return tx.Commit().Error
 }

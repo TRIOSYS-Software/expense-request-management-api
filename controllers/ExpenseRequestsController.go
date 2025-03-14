@@ -2,11 +2,15 @@ package controllers
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -107,6 +111,29 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 	if err := c.Bind(expenseRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, err)
 	}
+	file, err := c.FormFile("attachment")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "invalid file")
+	}
+	src, _ := file.Open()
+	defer src.Close()
+
+	filename := strings.Split(file.Filename, ".")
+
+	uniqueFileName := fmt.Sprintf("%d.%s", time.Now().UnixNano(), filename[1])
+	dstPath := filepath.Join("uploads", uniqueFileName)
+	fmt.Println(dstPath)
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Failed to create folder")
+	}
+
+	if _, err = io.Copy(dst, src); err != nil {
+		return c.JSON(http.StatusInternalServerError, "Failed to create file")
+	}
+
+	expenseRequest.Attachment = uniqueFileName
+
 	if err := ex.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
 		return c.JSON(http.StatusNotFound, err.Error())
 	}
@@ -144,8 +171,48 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 	if err := c.Bind(expenseRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, err)
 	}
+
+	file, err := c.FormFile("attachment")
+	if err == nil {
+		src, _ := file.Open()
+		defer src.Close()
+
+		filename := strings.Split(file.Filename, ".")
+
+		uniqueFileName := fmt.Sprintf("%d.%s", time.Now().UnixNano(), filename[1])
+		dstPath := filepath.Join("uploads", uniqueFileName)
+		dst, err := os.Create(dstPath)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to create folder")
+		}
+
+		if _, err = io.Copy(dst, src); err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to create file")
+		}
+
+		expenseRequest.Attachment = uniqueFileName
+	}
+
 	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {
 		return c.JSON(http.StatusNotFound, err)
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
+}
+
+func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+	}
+	if err := ex.ExpenseRequestsService.DeleteExpenseRequest(uint(id)); err != nil {
+		return c.JSON(http.StatusNotFound, err)
+	}
+	return c.JSON(http.StatusOK, "Expense request deleted successfully")
+}
+
+func (ex *ExpenseRequestsController) ServeExpenseRequestAttachment(c echo.Context) error {
+	file := c.Param("filename")
+	fmt.Println(file)
+	filePath := filepath.Join("uploads", file)
+	return c.File(filePath)
 }

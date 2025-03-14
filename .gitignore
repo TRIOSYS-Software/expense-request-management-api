@@ -3,3 +3,4 @@ go.sum
 .air.toml
 vendor/
 tmp/
+uploads/

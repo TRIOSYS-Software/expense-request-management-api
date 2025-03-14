@@ -4,13 +4,14 @@ import "time"
 
 type ExpenseRequests struct {
 	ID                   uint               `json:"id,omitempty" gorm:"primaryKey;autoIncrement;unique"`
-	Amount               float64            `json:"amount,omitempty" gorm:"not null"`
-	Description          string             `json:"description,omitempty" gorm:"not null"`
-	CategoryID           *uint              `json:"category_id,omitempty" gorm:"nullable"`
-	Project              *string            `json:"project,omitempty" gorm:"nullable"`
+	Amount               float64            `json:"amount,omitempty" form:"amount" gorm:"not null"`
+	Description          string             `json:"description,omitempty" form:"description" gorm:"not null"`
+	CategoryID           uint               `json:"category_id,omitempty" form:"category_id" gorm:"not null"`
+	Project              string             `json:"project,omitempty" form:"project" gorm:"not null"`
 	Approvers            *string            `json:"approvers,omitempty" gorm:"nullable"`
-	UserID               uint               `json:"user_id,omitempty" gorm:"not null"`
-	DateSubmitted        time.Time          `json:"date_submitted,omitempty" gorm:"not null"`
+	UserID               uint               `json:"user_id,omitempty" form:"user_id" gorm:"not null"`
+	DateSubmitted        time.Time          `json:"date_submitted,omitempty" form:"date_submitted" gorm:"not null"`
+	Attachment           string             `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
 	CreatedAt            time.Time          `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`
 	UpdatedAt            time.Time          `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
 	Status               string             `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected');not null;default:'pending'"`

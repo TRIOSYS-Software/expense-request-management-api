@@ -11,7 +11,7 @@ type ExpenseRequests struct {
 	Approvers            *string            `json:"approvers,omitempty" gorm:"nullable"`
 	UserID               uint               `json:"user_id,omitempty" form:"user_id" gorm:"not null"`
 	DateSubmitted        time.Time          `json:"date_submitted,omitempty" form:"date_submitted" gorm:"not null"`
-	Attachment           string             `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
+	Attachment           *string            `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
 	CreatedAt            time.Time          `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`
 	UpdatedAt            time.Time          `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
 	Status               string             `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected');not null;default:'pending'"`

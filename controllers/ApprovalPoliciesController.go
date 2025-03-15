@@ -45,7 +45,7 @@ func (u *ApprovalPoliciesController) CreateApprovalPolicy(c echo.Context) error 
 	}
 
 	if err := u.approvalPoliciesService.CreateApprovalPolicy(approvalPolicyDTO); err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, approvalPolicyDTO)
 }
@@ -60,7 +60,7 @@ func (u *ApprovalPoliciesController) UpdateApprovalPolicy(c echo.Context) error 
 		return c.JSON(http.StatusBadRequest, err)
 	}
 	if err := u.approvalPoliciesService.UpdateApprovalPolicy(uint(id), approvalPolicyDTO); err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, approvalPolicyDTO)
 }

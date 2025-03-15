@@ -6,9 +6,9 @@ type ApproverInput struct {
 }
 
 type ApprovalPolicyRequestDTO struct {
-	ConditionType  string          `json:"condition_type"`
-	ConditionValue string          `json:"condition_value"`
-	DepartmentID   *uint           `json:"department_id"`
-	Priority       uint            `json:"priority"`
-	Approvers      []ApproverInput `json:"approvers"`
+	MinAmount    float64         `json:"min_amount"`
+	MaxAmount    float64         `json:"max_amount"`
+	Project      string          `json:"project"`
+	DepartmentID *uint           `json:"department_id"`
+	Approvers    []ApproverInput `json:"approvers"`
 }

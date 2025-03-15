@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"shwetaik-expense-management-api/models"
-	"strconv"
 	"strings"
 
 	"gorm.io/gorm"
@@ -129,6 +128,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
+		fmt.Println("hit2")
 		fmt.Println("approval policy", approvalPolicy)
 
 		var approvalPoliciesUsers []models.ApprovalPoliciesUsers
@@ -158,74 +158,73 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 }
 
 func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
-	var approvalPolicies []models.ApprovalPolicies
-	err := r.db.Where("department_id = ? OR department_id IS NULL", departmentID).Order("priority DESC").Find(&approvalPolicies).Error
+	var approvalPolicy models.ApprovalPolicies
+	err := r.db.Where("(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount", departmentID, request.Project, request.Amount).First(&approvalPolicy).Error
 	if err != nil {
 		fmt.Println(err.Error())
-		return nil, err
+		return nil, fmt.Errorf("no approval policy found")
 	}
 
-	if len(approvalPolicies) == 0 {
-		return nil, fmt.Errorf("no approval policies found")
-	}
-	for _, approvalPolicy := range approvalPolicies {
-		switch approvalPolicy.ConditionType {
-		case "project":
-			if approvalPolicy.ConditionValue == request.Project {
-				return &approvalPolicy, nil
-			}
-		case "user":
-			conditionValue, err := strconv.Atoi(approvalPolicy.ConditionValue)
-			if err != nil {
-				return nil, err
-			}
-			if uint(conditionValue) == request.UserID {
-				return &approvalPolicy, nil
-			}
-		case "category":
-			conditionValue, err := strconv.Atoi(approvalPolicy.ConditionValue)
-			if err != nil {
-				return nil, err
-			}
-			if request.CategoryID == uint(conditionValue) {
-				return &approvalPolicy, nil
-			}
-		case "amount":
-			if isAmountConditionMet(approvalPolicy.ConditionValue, request.Amount) {
-				return &approvalPolicy, nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("no approval policies found")
+	fmt.Println("hit")
+
+	// for _, approvalPolicy := range approvalPolicies {
+	// 	switch approvalPolicy.ConditionType {
+	// 	case "project":
+	// 		if approvalPolicy.ConditionValue == request.Project {
+	// 			return &approvalPolicy, nil
+	// 		}
+	// 	case "user":
+	// 		conditionValue, err := strconv.Atoi(approvalPolicy.ConditionValue)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		if uint(conditionValue) == request.UserID {
+	// 			return &approvalPolicy, nil
+	// 		}
+	// 	case "category":
+	// 		conditionValue, err := strconv.Atoi(approvalPolicy.ConditionValue)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		if request.CategoryID == uint(conditionValue) {
+	// 			return &approvalPolicy, nil
+	// 		}
+	// 	case "amount":
+	// 		if isAmountConditionMet(approvalPolicy.ConditionValue, request.Amount) {
+	// 			return &approvalPolicy, nil
+	// 		}
+	// 	}
+	// }
+	return &approvalPolicy, nil
 }
 
-func isAmountConditionMet(condition string, amount float64) bool {
-	condition = strings.TrimSpace(condition) // Remove unnecessary spaces
-	var operator string
-	var value float64
+// func isAmountConditionMet(condition string, amount float64) bool {
+// 	condition = strings.TrimSpace(condition) // Remove unnecessary spaces
+// 	var operator string
+// 	var value float64
 
-	if strings.HasPrefix(condition, ">=") || strings.HasPrefix(condition, "<=") {
-		operator = condition[:2]
-		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[2:]), 64)
-	} else {
-		operator = condition[:1]
-		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[1:]), 64)
-	}
+// 	if strings.HasPrefix(condition, ">=") || strings.HasPrefix(condition, "<=") {
+// 		operator = condition[:2]
+// 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[2:]), 64)
+// 	} else {
+// 		operator = condition[:1]
+// 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[1:]), 64)
+// 	}
 
-	switch operator {
-	case ">":
-		return amount > value
-	case "<":
-		return amount < value
-	case "=":
-		return amount == value
-	case "<=":
-		return amount <= value
-	case ">=":
-		return amount >= value
-	}
-	return false
-}
+// 	switch operator {
+// 	case ">":
+// 		return amount > value
+// 	case "<":
+// 		return amount < value
+// 	case "=":
+// 		return amount == value
+// 	case "<=":
+// 		return amount <= value
+// 	case ">=":
+// 		return amount >= value
+// 	}
+// 	return false
+// }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.ExpenseRequests {
 	var expenseRequests []models.ExpenseRequests
@@ -255,8 +254,8 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	old_expenseRequest.IsSendToSQLACC = expenseRequest.IsSendToSQLACC
 	old_expenseRequest.Description = expenseRequest.Description
 
-	if expenseRequest.Attachment != "" {
-		oldFilePath := filepath.Join("uploads", old_expenseRequest.Attachment)
+	if expenseRequest.Attachment != nil {
+		oldFilePath := filepath.Join("uploads", *old_expenseRequest.Attachment)
 		if _, err := os.Stat(oldFilePath); err == nil {
 			os.Remove(oldFilePath)
 		}

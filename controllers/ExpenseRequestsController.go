@@ -112,31 +112,34 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		return c.JSON(http.StatusBadRequest, err)
 	}
 	file, err := c.FormFile("attachment")
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, "invalid file")
+	if err == nil {
+		src, _ := file.Open()
+		defer src.Close()
+
+		filename := strings.Split(file.Filename, ".")
+
+		uniqueFileName := fmt.Sprintf("%d.%s", time.Now().UnixNano(), filename[1])
+		dstPath := filepath.Join("uploads", uniqueFileName)
+		fmt.Println(dstPath)
+		dst, err := os.Create(dstPath)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to create path")
+		}
+
+		if _, err = io.Copy(dst, src); err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to create file")
+		}
+		expenseRequest.Attachment = &uniqueFileName
+	} else {
+		expenseRequest.Attachment = nil
 	}
-	src, _ := file.Open()
-	defer src.Close()
-
-	filename := strings.Split(file.Filename, ".")
-
-	uniqueFileName := fmt.Sprintf("%d.%s", time.Now().UnixNano(), filename[1])
-	dstPath := filepath.Join("uploads", uniqueFileName)
-	fmt.Println(dstPath)
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Failed to create folder")
-	}
-
-	if _, err = io.Copy(dst, src); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Failed to create file")
-	}
-
-	expenseRequest.Attachment = uniqueFileName
 
 	if err := ex.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
+		dstPath := filepath.Join("uploads", *expenseRequest.Attachment)
+		os.Remove(dstPath)
 		return c.JSON(http.StatusNotFound, err.Error())
 	}
+	fmt.Println(expenseRequest)
 	return c.JSON(http.StatusOK, expenseRequest)
 }
 
@@ -190,7 +193,7 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 			return c.JSON(http.StatusInternalServerError, "Failed to create file")
 		}
 
-		expenseRequest.Attachment = uniqueFileName
+		expenseRequest.Attachment = &uniqueFileName
 	}
 
 	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {

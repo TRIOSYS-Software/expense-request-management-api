@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"fmt"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 
@@ -31,10 +32,15 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 	tx := a.db.Begin()
 
 	approvalPolicy := models.ApprovalPolicies{
-		ConditionType:  approvalPolicyDTO.ConditionType,
-		ConditionValue: approvalPolicyDTO.ConditionValue,
-		Priority:       approvalPolicyDTO.Priority,
-		DepartmentID:   approvalPolicyDTO.DepartmentID,
+		MinAmount:    approvalPolicyDTO.MinAmount,
+		MaxAmount:    approvalPolicyDTO.MaxAmount,
+		Project:      approvalPolicyDTO.Project,
+		DepartmentID: approvalPolicyDTO.DepartmentID,
+	}
+
+	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID) {
+		tx.Rollback()
+		return fmt.Errorf("amount range overlapping")
 	}
 
 	if err := tx.Create(&approvalPolicy).Error; err != nil {
@@ -61,6 +67,29 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 	return tx.Commit().Error
 }
 
+func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, deprtmentID *uint) bool {
+	var count int64
+
+	if deprtmentID != nil {
+		if err := db.Model(&models.ApprovalPolicies{}).
+			Where("project = ?", project).
+			Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount).
+			Where("department_id = ?", deprtmentID).
+			Count(&count).Error; err != nil {
+			return false
+		}
+	} else {
+		if err := db.Model(&models.ApprovalPolicies{}).
+			Where("project = ?", project).
+			Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount).
+			Count(&count).Error; err != nil {
+			return false
+		}
+	}
+
+	return count > 0
+}
+
 func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *dtos.ApprovalPolicyRequestDTO) error {
 	tx := a.db.Begin()
 
@@ -70,10 +99,15 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *
 		return err
 	}
 
-	approvalPoliciesToUpdate.ConditionType = approvalPolicyDTO.ConditionType
-	approvalPoliciesToUpdate.ConditionValue = approvalPolicyDTO.ConditionValue
-	approvalPoliciesToUpdate.Priority = approvalPolicyDTO.Priority
+	approvalPoliciesToUpdate.MinAmount = approvalPolicyDTO.MinAmount
+	approvalPoliciesToUpdate.MaxAmount = approvalPolicyDTO.MaxAmount
+	approvalPoliciesToUpdate.Project = approvalPolicyDTO.Project
 	approvalPoliciesToUpdate.DepartmentID = approvalPolicyDTO.DepartmentID
+
+	if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID) {
+		tx.Rollback()
+		return fmt.Errorf("amount range overlapping")
+	}
 
 	if err := tx.Save(&approvalPoliciesToUpdate).Error; err != nil {
 		tx.Rollback()
@@ -105,14 +139,22 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *
 }
 
 func (a *ApprovalPoliciesRepo) DeleteApprovalPolicy(id uint) error {
+	tx := a.db.Begin()
 	var approvalPolicy models.ApprovalPolicies
-	if err := a.db.First(&approvalPolicy, id).Error; err != nil {
+	if err := tx.First(&approvalPolicy, id).Error; err != nil {
+		tx.Rollback()
 		return err
 	}
 
-	if err := a.db.Model(&approvalPolicy).Association("Approver").Clear(); err != nil {
+	if err := tx.Where("approval_policy_id = ?", id).Delete(&models.ApprovalPoliciesUsers{}).Error; err != nil {
+		tx.Rollback()
 		return err
 	}
 
-	return a.db.Delete(&approvalPolicy).Error
+	if err := tx.Delete(&approvalPolicy).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }

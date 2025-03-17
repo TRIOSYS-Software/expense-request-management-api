@@ -139,7 +139,6 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		os.Remove(dstPath)
 		return c.JSON(http.StatusNotFound, err.Error())
 	}
-	fmt.Println(expenseRequest)
 	return c.JSON(http.StatusOK, expenseRequest)
 }
 
@@ -194,6 +193,8 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 		}
 
 		expenseRequest.Attachment = &uniqueFileName
+	} else {
+		expenseRequest.Attachment = nil
 	}
 
 	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {

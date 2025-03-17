@@ -8,8 +8,9 @@ type ExpenseRequests struct {
 	Description          string             `json:"description,omitempty" form:"description" gorm:"not null"`
 	CategoryID           uint               `json:"category_id,omitempty" form:"category_id" gorm:"not null"`
 	Project              string             `json:"project,omitempty" form:"project" gorm:"not null"`
-	Approvers            *string            `json:"approvers,omitempty" gorm:"nullable"`
+	PaymentMethod        string             `json:"payment_method,omitempty" form:"payment_method" gorm:"not null"`
 	UserID               uint               `json:"user_id,omitempty" form:"user_id" gorm:"not null"`
+	GLAccount            string             `json:"gl_account,omitempty" form:"gl_account" gorm:"not null"`
 	DateSubmitted        time.Time          `json:"date_submitted,omitempty" form:"date_submitted" gorm:"not null"`
 	Attachment           *string            `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
 	CreatedAt            time.Time          `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`

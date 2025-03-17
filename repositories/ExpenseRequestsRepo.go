@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"shwetaik-expense-management-api/models"
-	"strings"
 
 	"gorm.io/gorm"
 )
@@ -104,54 +103,31 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 	var requestUser models.Users
 	tx.Where("id = ?", expenseRequest.UserID).First(&requestUser)
 
-	if expenseRequest.Approvers != nil {
-		approvers := strings.Split(*expenseRequest.Approvers, ",")
-		for i, approver := range approvers {
-			var approverUser models.Users
-			tx.Where("id", approver).First(&approverUser)
-			expenseApprovals := models.ExpenseApprovals{
-				RequestID:  expenseRequest.ID,
-				ApproverID: approverUser.ID,
-				Level:      uint(i) + 1,
-				Status:     "pending",
-				IsFinal:    i == len(approvers)-1,
-			}
-			if err := tx.Create(&expenseApprovals).Error; err != nil {
-				tx.Rollback()
-				return err
-			}
+	approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	var approvalPoliciesUsers []models.ApprovalPoliciesUsers
+	tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers)
+
+	if len(approvalPoliciesUsers) == 0 {
+		tx.Rollback()
+		return fmt.Errorf("no approver users found")
+	}
+
+	for i, approverPolicyUser := range approvalPoliciesUsers {
+		expenseApprovals := models.ExpenseApprovals{
+			RequestID:  expenseRequest.ID,
+			ApproverID: approverPolicyUser.UserID,
+			Level:      approverPolicyUser.Level,
+			Status:     "pending",
+			IsFinal:    i == len(approvalPoliciesUsers)-1,
 		}
-	} else {
-		approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
-		if err != nil {
+		if err := tx.Create(&expenseApprovals).Error; err != nil {
 			tx.Rollback()
 			return err
-		}
-
-		fmt.Println("hit2")
-		fmt.Println("approval policy", approvalPolicy)
-
-		var approvalPoliciesUsers []models.ApprovalPoliciesUsers
-		tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers)
-
-		if len(approvalPoliciesUsers) == 0 {
-			tx.Rollback()
-			return fmt.Errorf("no approver users found")
-		}
-
-		for i, approverPolicyUser := range approvalPoliciesUsers {
-			fmt.Println("approver", approverPolicyUser, i)
-			expenseApprovals := models.ExpenseApprovals{
-				RequestID:  expenseRequest.ID,
-				ApproverID: approverPolicyUser.UserID,
-				Level:      approverPolicyUser.Level,
-				Status:     "pending",
-				IsFinal:    i == len(approvalPoliciesUsers)-1,
-			}
-			if err := tx.Create(&expenseApprovals).Error; err != nil {
-				tx.Rollback()
-				return err
-			}
 		}
 	}
 	return tx.Commit().Error
@@ -161,11 +137,8 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests,
 	var approvalPolicy models.ApprovalPolicies
 	err := r.db.Where("(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount", departmentID, request.Project, request.Amount).First(&approvalPolicy).Error
 	if err != nil {
-		fmt.Println(err.Error())
 		return nil, fmt.Errorf("no approval policy found")
 	}
-
-	fmt.Println("hit")
 
 	// for _, approvalPolicy := range approvalPolicies {
 	// 	switch approvalPolicy.ConditionType {
@@ -253,11 +226,15 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 
 	old_expenseRequest.IsSendToSQLACC = expenseRequest.IsSendToSQLACC
 	old_expenseRequest.Description = expenseRequest.Description
+	old_expenseRequest.PaymentMethod = expenseRequest.PaymentMethod
+	old_expenseRequest.GLAccount = expenseRequest.GLAccount
 
-	if expenseRequest.Attachment != nil {
-		oldFilePath := filepath.Join("uploads", *old_expenseRequest.Attachment)
-		if _, err := os.Stat(oldFilePath); err == nil {
-			os.Remove(oldFilePath)
+	if old_expenseRequest.Attachment != expenseRequest.Attachment {
+		if old_expenseRequest.Attachment != nil {
+			oldFilePath := filepath.Join("uploads", *old_expenseRequest.Attachment)
+			if _, err := os.Stat(oldFilePath); err == nil {
+				os.Remove(oldFilePath)
+			}
 		}
 		old_expenseRequest.Attachment = expenseRequest.Attachment
 	}

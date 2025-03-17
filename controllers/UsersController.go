@@ -45,7 +45,7 @@ func (u *UsersController) LoginUser(c echo.Context) error {
 	}
 	data, err := u.UsersService.LoginUser(user)
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err.Error())
+		return c.JSON(http.StatusUnauthorized, err.Error())
 	}
 	return c.JSON(http.StatusOK, data)
 }

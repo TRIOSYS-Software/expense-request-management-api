@@ -74,7 +74,7 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 		"PROJECT":       expenseRequest.Project,
 		"DETAILS": []map[string]any{
 			{
-				"CODE":           paymentMethod,
+				"CODE":           expenseRequest.GLAccount,
 				"DESCRIPTION":    expenseRequest.Description,
 				"PROJECT":        expenseRequest.Project,
 				"AMOUNT":         expenseRequest.Amount,

@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -119,10 +120,14 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		filename := strings.Split(file.Filename, ".")
 
 		uniqueFileName := fmt.Sprintf("%d.%s", time.Now().UnixNano(), filename[1])
-		dstPath := filepath.Join("uploads", uniqueFileName)
-		fmt.Println(dstPath)
+		workingDir, err := os.Getwd()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to create path")
+		}
+		dstPath := filepath.Join(workingDir, "uploads", uniqueFileName)
 		dst, err := os.Create(dstPath)
 		if err != nil {
+			log.Printf("Failed to create file in %v, error: %v", dstPath, err)
 			return c.JSON(http.StatusInternalServerError, "Failed to create path")
 		}
 
@@ -157,7 +162,6 @@ func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) 
 	if err := c.Bind(expenseRequestDTO); err != nil {
 		return c.JSON(http.StatusBadRequest, "invalid request payload")
 	}
-	fmt.Println(expenseRequestDTO)
 	if err := ex.ExpenseRequestsService.SendExpenseRequestToSQLACC(expenseRequestDTO); err != nil {
 		return c.JSON(http.StatusNotFound, err.Error())
 	}
@@ -180,12 +184,15 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 		defer src.Close()
 
 		filename := strings.Split(file.Filename, ".")
-
+		workingDir, err := os.Getwd()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to create path")
+		}
 		uniqueFileName := fmt.Sprintf("%d.%s", time.Now().UnixNano(), filename[1])
-		dstPath := filepath.Join("uploads", uniqueFileName)
+		dstPath := filepath.Join(workingDir, "uploads", uniqueFileName)
 		dst, err := os.Create(dstPath)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to create folder")
+			return c.JSON(http.StatusInternalServerError, "Failed to create path")
 		}
 
 		if _, err = io.Copy(dst, src); err != nil {
@@ -216,7 +223,10 @@ func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error 
 
 func (ex *ExpenseRequestsController) ServeExpenseRequestAttachment(c echo.Context) error {
 	file := c.Param("filename")
-	fmt.Println(file)
-	filePath := filepath.Join("uploads", file)
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Failed to Get path")
+	}
+	filePath := filepath.Join(workingDir, "uploads", file)
 	return c.File(filePath)
 }

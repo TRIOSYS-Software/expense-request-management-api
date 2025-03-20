@@ -140,8 +140,10 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 	}
 
 	if err := ex.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
-		dstPath := filepath.Join("uploads", *expenseRequest.Attachment)
-		os.Remove(dstPath)
+		if expenseRequest.Attachment != nil {
+			dstPath := filepath.Join("uploads", *expenseRequest.Attachment)
+			os.Remove(dstPath)
+		}
 		return c.JSON(http.StatusNotFound, err.Error())
 	}
 	return c.JSON(http.StatusOK, expenseRequest)

@@ -104,10 +104,10 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *
 	approvalPoliciesToUpdate.Project = approvalPolicyDTO.Project
 	approvalPoliciesToUpdate.DepartmentID = approvalPolicyDTO.DepartmentID
 
-	if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID) {
-		tx.Rollback()
-		return fmt.Errorf("amount range overlapping")
-	}
+	// if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID) {
+	// 	tx.Rollback()
+	// 	return fmt.Errorf("amount range overlapping")
+	// }
 
 	if err := tx.Save(&approvalPoliciesToUpdate).Error; err != nil {
 		tx.Rollback()

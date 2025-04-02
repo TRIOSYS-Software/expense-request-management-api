@@ -26,3 +26,11 @@ func Encrypt(text string, key string) (string, error) {
 	cipherText := gcm.Seal(nonce, nonce, []byte(text), nil)
 	return base64.StdEncoding.EncodeToString(cipherText), nil
 }
+
+func GetToken(password string, key string) string {
+	token, err := Encrypt(password, key)
+	if err != nil {
+		panic(err)
+	}
+	return token
+}

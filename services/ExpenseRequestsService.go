@@ -83,7 +83,6 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 			},
 		},
 	}
-	fmt.Println(data)
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -96,7 +95,7 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("ShweTaik", getToken())
+	req.Header.Set("ShweTaik", helper.GetToken(configs.Envs.SQLACC_API_PASSWORD, configs.Envs.SQLACC_API_KEY))
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -109,14 +108,6 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 	}
 
 	return nil
-}
-
-func getToken() string {
-	token, err := helper.Encrypt(configs.Envs.SQLACC_API_PASSWORD, configs.Envs.SQLACC_API_KEY)
-	if err != nil {
-		panic(err)
-	}
-	return token
 }
 
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {

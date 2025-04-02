@@ -21,4 +21,7 @@ type ExpenseRequests struct {
 	Approvals            []ExpenseApprovals `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
 	Category             ExpenseCategories  `json:"category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	User                 Users              `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`
+	PaymentMethods       PaymentMethod      `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE"`
+	Projects             Project            `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
+	GLAccounts           GLAcc              `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY"`
 }

@@ -19,9 +19,16 @@ func NewExpenseRequestsRepo(db *gorm.DB) *ExpenseRequestsRepo {
 
 func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 	var expenseRequests []models.ExpenseRequests
-	r.db.Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
+	r.db.Preload("Projects").Preload("GLAccounts").
+		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
+		Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email, role_id, department_id")
-	}).Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Order("expense_requests.created_at DESC").Find(&expenseRequests)
+	}).
+		Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").
+		Preload("Category").
+		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		Order("expense_requests.created_at DESC").
+		Find(&expenseRequests)
 	return expenseRequests
 }
 

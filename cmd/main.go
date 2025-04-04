@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/routes"
 
@@ -12,6 +13,11 @@ func main() {
 	e := echo.New()
 
 	e.Use(middleware.CORS())
+
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: `${time_rfc3339} ${method} ${uri} ${status} ${latency_human}` + "\n",
+		Output: os.Stdout, // or a log file
+	}))
 
 	cfg := configs.Envs
 

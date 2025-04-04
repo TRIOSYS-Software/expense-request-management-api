@@ -38,6 +38,10 @@ func initUsersRoutes(e *echo.Group, db *gorm.DB) {
 	e.PUT("/users/:id", usersController.UpdateUser, middlewares.IsAuthenticated, middlewares.IsAdmin)
 	e.DELETE("/users/:id", usersController.DeleteUser, middlewares.IsAuthenticated, middlewares.IsAdmin)
 	e.POST("/verify", usersController.VerifyUser, middlewares.IsAuthenticated)
+	e.POST("/users/set-payment-methods", usersController.SetPaymentMethodsToUser, middlewares.IsAuthenticated)
+	e.GET("/users/payment-methods", usersController.GetUsersWithPaymentMethods, middlewares.IsAuthenticated)
+	e.GET("/users/:id/payment-methods", usersController.GetPaymentMethodsByUserID, middlewares.IsAuthenticated)
+	e.PUT("/users/:id/change-password", usersController.ChangePassword, middlewares.IsAuthenticated)
 }
 
 func initDepartmentsRoutes(e *echo.Group, db *gorm.DB) {
@@ -119,7 +123,7 @@ func initPaymentMethodsRoutes(e *echo.Group, db *gorm.DB) {
 	go func() {
 		err := paymentMethodService.SyncPaymentMethods()
 		if err != nil {
-			log.Println(err)
+			log.Println(err.Error())
 		} else {
 			log.Println("Payment methods synced successfully")
 		}
@@ -136,7 +140,7 @@ func initProjectsRoutes(e *echo.Group, db *gorm.DB) {
 	go func() {
 		err := projectService.SyncProjects()
 		if err != nil {
-			log.Println(err)
+			log.Println(err.Error())
 		} else {
 			log.Println("Projects synced successfully")
 		}

@@ -2,8 +2,10 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/configs"
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
 
@@ -90,4 +92,32 @@ func (u *UsersService) LoginUser(user *models.Users) (*struct {
 	}
 
 	return data, err
+}
+
+func (u *UsersService) SetPaymentMethodsToUser(request *dtos.UserPaymentMethodDTO) error {
+	return u.UsersRepo.SetPaymentMethodsToUser(request)
+}
+
+func (u *UsersService) GetUsersWithPaymentMethods() (*[]models.Users, error) {
+	return u.UsersRepo.GetUsersWithPaymentMethods()
+}
+
+func (u *UsersService) GetUserPaymentMethods(userID uint) (*[]models.PaymentMethod, error) {
+	return u.UsersRepo.GetUserPaymentMethods(userID)
+}
+
+func (u *UsersService) ChangePassword(id uint, request *dtos.ChangePasswordRequestDTO) error {
+	user, err := u.UsersRepo.GetUserByID(id)
+	if err != nil {
+		return err
+	}
+	if !helper.CheckPasswordHash(request.OldPassword, user.Password) {
+		return fmt.Errorf("invalid old password")
+	}
+	hashPassword, err := helper.HashPassword(request.NewPassword)
+	if err != nil {
+		return err
+	}
+	user.Password = hashPassword
+	return u.UsersRepo.UpdateUser(user)
 }

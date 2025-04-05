@@ -7,8 +7,8 @@ type ExpenseRequests struct {
 	Amount               float64            `json:"amount,omitempty" form:"amount" gorm:"not null"`
 	Description          string             `json:"description,omitempty" form:"description" gorm:"not null"`
 	CategoryID           uint               `json:"category_id,omitempty" form:"category_id" gorm:"not null"`
-	Project              string             `json:"project,omitempty" form:"project" gorm:"not null"`
-	PaymentMethod        string             `json:"payment_method,omitempty" form:"payment_method" gorm:"not null"`
+	Project              string             `json:"project,omitempty" form:"project" gorm:"type:VARCHAR;size:20;not null"`
+	PaymentMethod        string             `json:"payment_method,omitempty" form:"payment_method" gorm:"type:VARCHAR;size:10;not null"`
 	UserID               uint               `json:"user_id,omitempty" form:"user_id" gorm:"not null"`
 	GLAccount            string             `json:"gl_account,omitempty" form:"gl_account" gorm:"not null"`
 	DateSubmitted        time.Time          `json:"date_submitted,omitempty" form:"date_submitted" gorm:"not null"`

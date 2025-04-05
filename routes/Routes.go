@@ -99,7 +99,7 @@ func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/expense-requests/user/:id", expenseRequestsController.GetExpenseRequestsByUserID, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/approver/:id", expenseRequestsController.GetExpenseRequestByApproverID, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/summary", expenseRequestsController.GetExpenseRequestsSummary, middlewares.IsAuthenticated)
-	e.POST("/expense-requests/send-to-sqlacc", expenseRequestsController.SendExpenseRequestToSQLACC, middlewares.IsAuthenticated)
+	e.POST("/expense-requests/:id/send-to-sqlacc", expenseRequestsController.SendExpenseRequestToSQLACC, middlewares.IsAuthenticated)
 	e.DELETE("/expense-requests/:id", expenseRequestsController.DeleteExpenseRequest, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/attachment/:filename", expenseRequestsController.ServeExpenseRequestAttachment)
 }

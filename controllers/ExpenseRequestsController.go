@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
 	"strconv"
@@ -160,14 +159,14 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 }
 
 func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) error {
-	expenseRequestDTO := new(dtos.ApprovedExpenseRequestsDTO)
-	if err := c.Bind(expenseRequestDTO); err != nil {
-		return c.JSON(http.StatusBadRequest, "invalid request payload")
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
 	}
-	if err := ex.ExpenseRequestsService.SendExpenseRequestToSQLACC(expenseRequestDTO); err != nil {
+	if err := ex.ExpenseRequestsService.SendExpenseRequestToSQLACC(uint(id)); err != nil {
 		return c.JSON(http.StatusNotFound, err.Error())
 	}
-	return c.JSON(http.StatusOK, expenseRequestDTO)
+	return c.JSON(http.StatusOK, "Expense request sent to SQLACC successfully")
 }
 
 func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error {

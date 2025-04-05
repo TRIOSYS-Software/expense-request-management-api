@@ -7,9 +7,9 @@ import (
 	"net/http"
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/configs"
-	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
+	"strings"
 )
 
 type ExpenseRequestsService struct {
@@ -48,13 +48,13 @@ func (s *ExpenseRequestsService) UpdateExpenseRequest(id uint, expenseRequest *m
 	return s.ExpenseRequestsRepo.UpdateExpenseRequest(id, expenseRequest)
 }
 
-func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(expenseRequestDTO *dtos.ApprovedExpenseRequestsDTO) error {
-	expenseRequest, err := s.GetExpenseRequestByID(expenseRequestDTO.ExpenseID)
+func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
+	expenseRequest, err := s.GetExpenseRequestByID(id)
 	if err != nil {
 		return err
 	}
 	if expenseRequest.Status == "approved" {
-		if err := callSQLACCAPI(expenseRequest, expenseRequestDTO.PaymentMethod); err != nil {
+		if err := callSQLACCAPI(expenseRequest, expenseRequest.PaymentMethods.DESCRIPTION); err != nil {
 			return err
 		}
 		expenseRequest.IsSendToSQLACC = true
@@ -66,11 +66,17 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(expenseRequestDTO *d
 }
 
 func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string) error {
+	var docKey string
+	if strings.Contains(strings.ToLower(paymentMethod), "cash") {
+		docKey = fmt.Sprintf("APP-C-PV-%d", expenseRequest.ID)
+	} else {
+		docKey = fmt.Sprintf("APP-B-PV-%d", expenseRequest.ID)
+	}
 	data := map[string]any{
-		"DOCNO":         fmt.Sprintf("APP-PV-%d", expenseRequest.ID),
+		"DOCNO":         docKey,
 		"DOCTYPE":       "PV",
 		"DESCRIPTION":   expenseRequest.Description,
-		"PAYMENTMETHOD": paymentMethod,
+		"PAYMENTMETHOD": expenseRequest.PaymentMethod,
 		"PROJECT":       expenseRequest.Project,
 		"DETAILS": []map[string]any{
 			{

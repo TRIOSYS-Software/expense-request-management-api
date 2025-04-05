@@ -34,7 +34,14 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseRequests, error) {
 	var expenseRequest models.ExpenseRequests
-	err := r.db.Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).First(&expenseRequest, id).Error
+	err := r.db.Preload("Projects").
+		Preload("GLAccounts").
+		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
+		Preload("Approvals").
+		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		Preload("Category").
+		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		First(&expenseRequest, id).Error
 	return &expenseRequest, err
 }
 

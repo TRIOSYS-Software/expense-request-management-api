@@ -6,7 +6,7 @@ type ApprovalPolicies struct {
 	ID           uint                    `json:"id" gorm:"primaryKey;autoIncrement;unique"`
 	MinAmount    float64                 `json:"min_amount" gorm:"not null"`
 	MaxAmount    float64                 `json:"max_amount" gorm:"not null"`
-	Project      string                  `json:"project" gorm:"not null"`
+	Project      string                  `json:"project" gorm:"type:VARCHAR;size:20;not null"`
 	DepartmentID *uint                   `json:"department" gorm:"nullable"`
 	CreatedAt    time.Time               `json:"created_at" gorm:"autoCreateTime;not null"`
 	UpdatedAt    time.Time               `json:"updated_at" gorm:"autoUpdateTime;not null"`

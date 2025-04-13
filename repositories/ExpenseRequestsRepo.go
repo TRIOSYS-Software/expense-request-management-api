@@ -25,7 +25,6 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 		return db.Select("id, name, email, role_id, department_id")
 	}).
 		Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").
-		Preload("Category").
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Order("expense_requests.created_at DESC").
 		Find(&expenseRequests)
@@ -39,7 +38,6 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").
 		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
-		Preload("Category").
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		First(&expenseRequest, id).Error
 	return &expenseRequest, err
@@ -49,7 +47,12 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.Expen
 	var expenseRequests []models.ExpenseRequests
 	r.db.Where("user_id = ?", id).Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email")
-	}).Preload("Category").Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Order("expense_requests.created_at DESC").Find(&expenseRequests)
+	}).
+		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		Preload("Projects").
+		Preload("GLAccounts").
+		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
+		Order("expense_requests.created_at DESC").Find(&expenseRequests)
 	return expenseRequests
 }
 
@@ -63,9 +66,6 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 	}
 	if filters["status"] != nil {
 		db = db.Where("expense_requests.status = ?", filters["status"].(string))
-	}
-	if filters["category_id"] != nil {
-		db = db.Where("category_id = ?", filters["category_id"])
 	}
 
 	if filters["start_date"] != nil && filters["end_date"] != nil {
@@ -217,6 +217,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 	var expenseRequests []models.ExpenseRequests
 	r.db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
 		Where("expense_approvals.approver_id = ?", id).
+		Preload("Projects").
+		Preload("GLAccounts").
+		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").
 		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 			return db.Select("id, name, email") // Select specific fields for Users
@@ -224,7 +227,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 		Preload("User", func(db *gorm.DB) *gorm.DB {
 			return db.Select("id, name, email") // Select specific fields for User
 		}).
-		Preload("Category").Order("expense_requests.created_at DESC").
+		Order("expense_requests.created_at DESC").
 		Find(&expenseRequests)
 	return expenseRequests
 }
@@ -253,10 +256,9 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		old_expenseRequest.Attachment = expenseRequest.Attachment
 	}
 
-	if old_expenseRequest.CategoryID != expenseRequest.CategoryID && old_expenseRequest.Project != expenseRequest.Project && old_expenseRequest.Amount != expenseRequest.Amount {
+	if old_expenseRequest.Project != expenseRequest.Project && old_expenseRequest.Amount != expenseRequest.Amount {
 
 		old_expenseRequest.Project = expenseRequest.Project
-		old_expenseRequest.CategoryID = expenseRequest.CategoryID
 		old_expenseRequest.Amount = expenseRequest.Amount
 		old_expenseRequest.Description = expenseRequest.Description
 		old_expenseRequest.CurrentApproverLevel = 1

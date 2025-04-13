@@ -18,7 +18,11 @@ func NewApprovalPoliciesRepo(db *gorm.DB) *ApprovalPoliciesRepo {
 
 func (a *ApprovalPoliciesRepo) GetApprovalPolicies() ([]models.ApprovalPolicies, error) {
 	var approvalPolicies []models.ApprovalPolicies
-	err := a.db.Preload("PolicyUsers", func(db *gorm.DB) *gorm.DB { return db.Order("level ASC") }).Preload("PolicyUsers.Approver", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Preload("Departments").Find(&approvalPolicies).Error
+	err := a.db.Preload("PolicyUsers", func(db *gorm.DB) *gorm.DB { return db.Order("level ASC") }).
+		Preload("PolicyUsers.Approver", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		Preload("Departments").
+		Preload("Projects").
+		Find(&approvalPolicies).Error
 	return approvalPolicies, err
 }
 

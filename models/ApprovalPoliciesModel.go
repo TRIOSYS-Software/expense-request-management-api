@@ -12,4 +12,5 @@ type ApprovalPolicies struct {
 	UpdatedAt    time.Time               `json:"updated_at" gorm:"autoUpdateTime;not null"`
 	PolicyUsers  []ApprovalPoliciesUsers `json:"policy_users,omitempty" gorm:"foreignKey:ApprovalPolicyID;references:ID"`
 	Departments  Departments             `json:"departments,omitempty" gorm:"foreignKey:DepartmentID;references:ID"`
+	Projects     Project                 `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
 }

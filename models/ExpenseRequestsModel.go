@@ -6,7 +6,6 @@ type ExpenseRequests struct {
 	ID                   uint               `json:"id,omitempty" gorm:"primaryKey;autoIncrement;unique"`
 	Amount               float64            `json:"amount,omitempty" form:"amount" gorm:"not null"`
 	Description          string             `json:"description,omitempty" form:"description" gorm:"not null"`
-	CategoryID           uint               `json:"category_id,omitempty" form:"category_id" gorm:"not null"`
 	Project              string             `json:"project,omitempty" form:"project" gorm:"type:VARCHAR;size:20;not null"`
 	PaymentMethod        string             `json:"payment_method,omitempty" form:"payment_method" gorm:"type:VARCHAR;size:10;not null"`
 	UserID               uint               `json:"user_id,omitempty" form:"user_id" gorm:"not null"`
@@ -19,7 +18,6 @@ type ExpenseRequests struct {
 	CurrentApproverLevel uint               `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
 	IsSendToSQLACC       bool               `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
 	Approvals            []ExpenseApprovals `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
-	Category             ExpenseCategories  `json:"category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	User                 Users              `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`
 	PaymentMethods       PaymentMethod      `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE"`
 	Projects             Project            `json:"projects" gorm:"foreignKey:Project;reference:CODE"`

@@ -31,7 +31,7 @@ func initUsersRoutes(e *echo.Group, db *gorm.DB) {
 	usersService := services.NewUsersService(usersRepo)
 	usersController := controllers.NewUsersController(usersService)
 	e.GET("/users", usersController.GetUsers, middlewares.IsAuthenticated)
-	e.POST("/users", usersController.CreateUser, middlewares.IsAdmin)
+	e.POST("/users", usersController.CreateUser, middlewares.IsAuthenticated, middlewares.IsAdmin)
 	e.POST("/login", usersController.LoginUser)
 	e.GET("/users/:id", usersController.GetUserByID, middlewares.IsAuthenticated)
 	e.GET("/users/role/:role_id", usersController.GetUsersByRole, middlewares.IsAuthenticated)
@@ -117,7 +117,7 @@ func initPaymentMethodsRoutes(e *echo.Group, db *gorm.DB) {
 	paymentMethodRepo := repositories.NewPaymentMethodRepo(db)
 	paymentMethodService := services.NewPaymentMethodService(paymentMethodRepo)
 	paymentMethodController := controllers.NewPaymentMethodController(paymentMethodService)
-	e.POST("/payment-methods/sync", paymentMethodController.SyncPaymentMethods, middlewares.IsAuthenticated)
+	e.POST("/payment-methods/sync", paymentMethodController.SyncPaymentMethods, middlewares.IsAuthenticated, middlewares.IsAdmin)
 	e.GET("/payment-methods", paymentMethodController.GetPaymentMethods, middlewares.IsAuthenticated)
 
 	go func() {
@@ -134,7 +134,7 @@ func initProjectsRoutes(e *echo.Group, db *gorm.DB) {
 	projectRepo := repositories.NewProjectRepo(db)
 	projectService := services.NewProjectService(projectRepo)
 	projectController := controllers.NewProjectController(projectService)
-	e.POST("/projects/sync", projectController.SyncProjects, middlewares.IsAuthenticated)
+	e.POST("/projects/sync", projectController.SyncProjects, middlewares.IsAuthenticated, middlewares.IsAdmin)
 	e.GET("/projects", projectController.GetProjects, middlewares.IsAuthenticated)
 
 	go func() {

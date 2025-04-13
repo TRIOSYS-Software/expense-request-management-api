@@ -23,6 +23,10 @@ func (r *GLAccRepo) GetGLAcc() ([]models.GLAcc, error) {
 	return glAcc, nil
 }
 
+func (r *GLAccRepo) DeleteGLAcc(glAcc models.GLAcc) error {
+	return r.db.Delete(&glAcc).Error
+}
+
 func (r *GLAccRepo) SaveGLAcc(glAcc []models.GLAcc) error {
 	for _, acc := range glAcc {
 		err := r.db.Save(&acc).Error

@@ -152,7 +152,7 @@ func initGLAccRoutes(e *echo.Group, db *gorm.DB) {
 	glAccService := services.NewGLAccService(glAccRepo)
 	glAccController := controllers.NewGLAccController(glAccService)
 	e.GET("/gl-acc", glAccController.GetGLAcc, middlewares.IsAuthenticated)
-	e.POST("/gl-acc/sync", glAccController.SyncGLAcc, middlewares.IsAuthenticated)
+	e.POST("/gl-acc/sync", glAccController.SyncGLAcc, middlewares.IsAuthenticated, middlewares.IsAdmin)
 
 	go func() {
 		err := glAccService.SyncGLAcc()

@@ -23,7 +23,8 @@ func (s *GLAccService) GetGLAcc() ([]models.GLAcc, error) {
 }
 
 func FetchAllGLAcc() ([]models.GLAcc, error) {
-	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, "gl-accounts/low-level")
+	uri := fmt.Sprintf("gl-accounts/codes?codes=%v", configs.Envs.FILTER_GL_CODE)
+	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, uri)
 	req, err := http.NewRequest("GET", api, nil)
 	if err != nil {
 		return nil, err
@@ -49,9 +50,31 @@ func FetchAllGLAcc() ([]models.GLAcc, error) {
 	return GLAccs, nil
 }
 
+func (s *GLAccService) DeleteGLAccs(glAccs []models.GLAcc) error {
+	oldGLAccs, err := s.Repo.GetGLAcc()
+	if err != nil {
+		return err
+	}
+	glAccMap := make(map[int]models.GLAcc, len(glAccs))
+	for _, newGLAcc := range glAccs {
+		glAccMap[newGLAcc.DOCKEY] = newGLAcc
+	}
+	for _, oldGLAcc := range oldGLAccs {
+		if _, ok := glAccMap[oldGLAcc.DOCKEY]; !ok {
+			if err := s.Repo.DeleteGLAcc(oldGLAcc); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (s *GLAccService) SyncGLAcc() error {
 	GLAccs, err := FetchAllGLAcc()
 	if err != nil {
+		return err
+	}
+	if err := s.DeleteGLAccs(GLAccs); err != nil {
 		return err
 	}
 	return s.Repo.SaveGLAcc(GLAccs)

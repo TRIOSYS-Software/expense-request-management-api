@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"log"
 	"net/http"
 	"shwetaik-expense-management-api/configs"
 
@@ -19,34 +20,29 @@ func IsAuthenticated(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		token := c.Request().Header.Get("Authorization")
 		if token == "" {
+			log.Println("token not found")
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		tsk, err := validateToken(token)
 		if err != nil || !tsk.Valid {
+			log.Println(err.Error())
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		claims, ok := tsk.Claims.(jwt.MapClaims)
 		if !ok {
+			log.Println("invalid token")
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
-
-		c.Set("user_id", claims["user_id"].(float64))
+		c.Set("user_id", claims["user_id"])
+		c.Set("user_role", claims["user_role"])
 		return next(c)
 	}
 }
 
 func IsAdmin(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		token := c.Request().Header.Get("Authorization")
-		if token == "" {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		}
-		t, err := validateToken(token)
-		if err != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		}
-		claims, ok := t.Claims.(jwt.MapClaims)
-		if !ok || claims["user_role"] != 1.0 {
+		userRole := uint(c.Get("user_role").(float64))
+		if userRole != 1 {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		return next(c)

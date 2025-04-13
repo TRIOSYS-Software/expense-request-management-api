@@ -67,10 +67,10 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 
 func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string) error {
 	var docKey string
-	if strings.Contains(strings.ToLower(paymentMethod), "cash") {
-		docKey = fmt.Sprintf("APP-C-PV-%d", expenseRequest.ID)
-	} else {
+	if strings.Contains(strings.ToLower(paymentMethod), "bank") {
 		docKey = fmt.Sprintf("APP-B-PV-%d", expenseRequest.ID)
+	} else {
+		docKey = fmt.Sprintf("APP-C-PV-%d", expenseRequest.ID)
 	}
 	data := map[string]any{
 		"DOCNO":         docKey,

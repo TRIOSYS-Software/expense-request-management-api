@@ -24,7 +24,7 @@ type Config struct {
 	SQLACC_API_PASSWORD string
 	SQLACC_API_KEY      string
 	SQLACC_API_URL      string
-	FILTER_GL_CODE      string
+	FILTER_GL_CODES     string
 }
 
 func loadEnv(env string) *Config {
@@ -85,7 +85,7 @@ func loadEnv(env string) *Config {
 		panic(errors.New("SQLACC_API_URL is not set"))
 	}
 
-	cfg.FILTER_GL_CODE = os.Getenv("FILTER_GL_CODE")
+	cfg.FILTER_GL_CODES = os.Getenv("FILTER_GL_CODES")
 	return cfg
 }
 

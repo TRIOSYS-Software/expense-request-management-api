@@ -23,7 +23,7 @@ func (s *GLAccService) GetGLAcc() ([]models.GLAcc, error) {
 }
 
 func FetchAllGLAcc() ([]models.GLAcc, error) {
-	uri := fmt.Sprintf("gl-accounts/codes?codes=%v", configs.Envs.FILTER_GL_CODE)
+	uri := fmt.Sprintf("gl-accounts/codes?codes=%v", configs.Envs.FILTER_GL_CODES)
 	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, uri)
 	req, err := http.NewRequest("GET", api, nil)
 	if err != nil {

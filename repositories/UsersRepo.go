@@ -103,3 +103,51 @@ func (u *UsersRepo) GetUserPaymentMethods(userID uint) (*[]models.PaymentMethod,
 	}
 	return &paymentMethods, nil
 }
+
+func (u *UsersRepo) SetGLAccountsToUser(request *dtos.UserGLAccountDTO) error {
+	tx := u.db.Begin()
+
+	var user models.Users
+	if err := tx.Model(&models.Users{}).First(&user, request.UserID).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	var glAccounts []models.GLAcc
+	if err := tx.Find(&glAccounts, "DOCKEY in (?)", request.GLAccounts).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if len(glAccounts) == 0 {
+		tx.Rollback()
+		return fmt.Errorf("GL account not found")
+	}
+
+	if err := tx.Model(&user).Association("GLAccounts").Clear(); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&user).Association("GLAccounts").Append(glAccounts); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}
+
+func (u *UsersRepo) GetUsersWithGLAccounts() (*[]models.Users, error) {
+	var users []models.Users
+	err := u.db.Select("id, name, email, role_id, department_id").Joins("JOIN users_gl_accounts ON users_gl_accounts.users_id = users.id").Preload("GLAccounts").Group("users.id").Find(&users).Error
+	return &users, err
+}
+
+func (u *UsersRepo) GetUserGLAccounts(userID uint) (*[]models.GLAcc, error) {
+	var glAccounts []models.GLAcc
+	err := u.db.Joins("JOIN users_gl_accounts ON users_gl_accounts.gl_acc_dockey = gl_accs.dockey").Where("users_gl_accounts.users_id = ?", userID).Find(&glAccounts).Error
+	if err != nil {
+		return nil, err
+	}
+	return &glAccounts, nil
+}

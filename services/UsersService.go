@@ -106,6 +106,18 @@ func (u *UsersService) GetUserPaymentMethods(userID uint) (*[]models.PaymentMeth
 	return u.UsersRepo.GetUserPaymentMethods(userID)
 }
 
+func (u *UsersService) SetGLAccountsToUser(request *dtos.UserGLAccountDTO) error {
+	return u.UsersRepo.SetGLAccountsToUser(request)
+}
+
+func (u *UsersService) GetUsersWithGLAccounts() (*[]models.Users, error) {
+	return u.UsersRepo.GetUsersWithGLAccounts()
+}
+
+func (u *UsersService) GetUserGLAccounts(userID uint) (*[]models.GLAcc, error) {
+	return u.UsersRepo.GetUserGLAccounts(userID)
+}
+
 func (u *UsersService) ChangePassword(id uint, request *dtos.ChangePasswordRequestDTO) error {
 	user, err := u.UsersRepo.GetUserByID(id)
 	if err != nil {

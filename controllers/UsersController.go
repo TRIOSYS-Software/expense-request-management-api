@@ -149,6 +149,42 @@ func (u *UsersController) GetPaymentMethodsByUserID(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, paymentMethods)
 }
 
+func (u *UsersController) SetGLAccountsToUser(c echo.Context) error {
+	userGLAccountDTO := new(dtos.UserGLAccountDTO)
+	if err := c.Bind(userGLAccountDTO); err != nil {
+		log.Printf("Error binding GLAccounts to user: %v", err)
+		return c.JSON(http.StatusBadRequest, err)
+	}
+	if err := u.UsersService.SetGLAccountsToUser(userGLAccountDTO); err != nil {
+		log.Printf("Error setting GLAccounts to user: %v", err)
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+	return c.JSON(http.StatusOK, "GLAccounts set successfully")
+}
+
+func (u *UsersController) GetGLAccountsByUserID(ctx echo.Context) error {
+	userID := ctx.Param("id")
+	id, err := strconv.Atoi(userID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, "Invalid user id")
+	}
+	GLAccounts, err := u.UsersService.GetUserGLAccounts(uint(id))
+	if err != nil {
+		log.Println(err)
+		return ctx.JSON(http.StatusNotFound, err)
+	}
+	return ctx.JSON(http.StatusOK, GLAccounts)
+}
+
+func (u *UsersController) GetUsersWithGLAccounts(c echo.Context) error {
+	users, err := u.UsersService.GetUsersWithGLAccounts()
+	if err != nil {
+		log.Printf("Error getting users with GLAccounts: %v", err)
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+	return c.JSON(http.StatusOK, users)
+}
+
 func (u *UsersController) ChangePassword(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

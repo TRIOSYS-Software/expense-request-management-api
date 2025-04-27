@@ -17,4 +17,5 @@ type Users struct {
 	Departments    *Departments            `json:"departments,omitempty" gorm:"foreignKey:DepartmentID;references:ID"`
 	PolicyUsers    []ApprovalPoliciesUsers `json:"policy_users,omitempty" gorm:"foreignKey:UserID;references:ID"`
 	PaymentMethods []PaymentMethod         `json:"payment_methods,omitempty" gorm:"many2many:users_payment_methods;"`
+	GLAccounts     []GLAcc                 `json:"gl_accounts,omitempty" gorm:"many2many:users_gl_accounts;"`
 }

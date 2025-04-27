@@ -41,6 +41,9 @@ func initUsersRoutes(e *echo.Group, db *gorm.DB) {
 	e.POST("/users/set-payment-methods", usersController.SetPaymentMethodsToUser, middlewares.IsAuthenticated)
 	e.GET("/users/payment-methods", usersController.GetUsersWithPaymentMethods, middlewares.IsAuthenticated)
 	e.GET("/users/:id/payment-methods", usersController.GetPaymentMethodsByUserID, middlewares.IsAuthenticated)
+	e.POST("/users/set-gl-accounts", usersController.SetGLAccountsToUser, middlewares.IsAuthenticated)
+	e.GET("/users/gl-accounts", usersController.GetUsersWithGLAccounts, middlewares.IsAuthenticated)
+	e.GET("/users/:id/gl-accounts", usersController.GetGLAccountsByUserID, middlewares.IsAuthenticated)
 	e.PUT("/users/:id/change-password", usersController.ChangePassword, middlewares.IsAuthenticated)
 }
 

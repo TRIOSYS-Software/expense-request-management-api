@@ -221,10 +221,10 @@ func (u *UsersController) ValidatePasswordResetToken(c echo.Context) error {
 		log.Printf("Error binding password reset token: %v", err.Error())
 		return c.JSON(http.StatusBadRequest, err)
 	}
-	// if err := u.UsersService.ValidatePasswordResetToken(*token); err != nil {
-	// 	log.Printf("Error validating password reset token: %v", err.Error())
-	// 	return c.JSON(http.StatusBadRequest, map[string]any{"message": err.Error(), "valid": false})
-	// }
+	if err := u.UsersService.ValidatePasswordResetToken(*token); err != nil {
+		log.Printf("Error validating password reset token: %v", err.Error())
+		return c.JSON(http.StatusBadRequest, map[string]any{"message": err.Error(), "valid": false})
+	}
 	return c.JSON(http.StatusOK, map[string]any{"message": "Password reset token is valid", "valid": true})
 }
 

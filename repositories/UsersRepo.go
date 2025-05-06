@@ -170,3 +170,15 @@ func (u *UsersRepo) ValidatePasswordResetToken(passwordReset *models.PasswordRes
 	err = u.db.First(&passwordReset, "token = ? and user_id = ?", token.Token, user.ID).Error
 	return err
 }
+
+func (u *UsersRepo) UpdatePasswordReset(passwordReset *models.PasswordReset) error {
+	if err := u.db.Model(passwordReset).Updates(passwordReset).Error; err != nil {
+		return err
+	}
+	fmt.Println(passwordReset)
+	return nil
+}
+
+func (u *UsersRepo) DeletePasswordReset(passwordReset *models.PasswordReset) error {
+	return u.db.Delete(&models.PasswordReset{}, "user_id = ?", passwordReset.UserID).Error
+}

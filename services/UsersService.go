@@ -165,14 +165,16 @@ func (u *UsersService) ForgotPassword(request *dtos.PasswordResetRequestDTO) err
 
 func (u *UsersService) ValidatePasswordResetToken(token dtos.PasswordResetTokenDTO) error {
 	passwordReset := models.PasswordReset{}
-	err := u.UsersRepo.ValidatePasswordResetToken(&passwordReset, token)
+	if err := u.UsersRepo.ValidatePasswordResetToken(&passwordReset, token); err != nil {
+		return err
+	}
 	if passwordReset.ExpiredAt.Before(time.Now()) {
 		return errors.New("password reset token has expired")
 	}
 	if passwordReset.Used {
 		return errors.New("password reset token has already been used")
 	}
-	return err
+	return nil
 }
 
 func (u *UsersService) ResetPassword(request *dtos.PasswordResetChangeRequestDTO) error {
@@ -185,5 +187,11 @@ func (u *UsersService) ResetPassword(request *dtos.PasswordResetChangeRequestDTO
 		return err
 	}
 	user.Password = hashPassword
-	return u.UsersRepo.UpdateUser(user)
+	if err = u.UsersRepo.UpdateUser(user); err != nil {
+		return err
+	}
+	if err = u.UsersRepo.DeletePasswordReset(&models.PasswordReset{UserID: user.ID}); err != nil {
+		return err
+	}
+	return nil
 }

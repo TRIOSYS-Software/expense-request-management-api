@@ -201,3 +201,42 @@ func (u *UsersController) ChangePassword(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, "Password changed successfully")
 }
+
+func (u *UsersController) ForgotPassword(c echo.Context) error {
+	request := new(dtos.PasswordResetRequestDTO)
+	if err := c.Bind(request); err != nil {
+		log.Printf("Error binding forget password request: %v", err.Error())
+		return c.JSON(http.StatusBadRequest, err)
+	}
+	if err := u.UsersService.ForgotPassword(request); err != nil {
+		log.Printf("Error forgot password: %v", err.Error())
+		return c.JSON(http.StatusNotFound, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "Password reset link sent successfully"})
+}
+
+func (u *UsersController) ValidatePasswordResetToken(c echo.Context) error {
+	token := new(dtos.PasswordResetTokenDTO)
+	if err := c.Bind(token); err != nil {
+		log.Printf("Error binding password reset token: %v", err.Error())
+		return c.JSON(http.StatusBadRequest, err)
+	}
+	// if err := u.UsersService.ValidatePasswordResetToken(*token); err != nil {
+	// 	log.Printf("Error validating password reset token: %v", err.Error())
+	// 	return c.JSON(http.StatusBadRequest, map[string]any{"message": err.Error(), "valid": false})
+	// }
+	return c.JSON(http.StatusOK, map[string]any{"message": "Password reset token is valid", "valid": true})
+}
+
+func (u *UsersController) ResetPassword(c echo.Context) error {
+	request := new(dtos.PasswordResetChangeRequestDTO)
+	if err := c.Bind(request); err != nil {
+		log.Printf("Error binding forget password change request: %v", err.Error())
+		return c.JSON(http.StatusBadRequest, err)
+	}
+	if err := u.UsersService.ResetPassword(request); err != nil {
+		log.Printf("Error forgot password change: %v", err.Error())
+		return c.JSON(http.StatusNotFound, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
+}

@@ -133,3 +133,57 @@ func (u *UsersService) ChangePassword(id uint, request *dtos.ChangePasswordReque
 	user.Password = hashPassword
 	return u.UsersRepo.UpdateUser(user)
 }
+
+func (u *UsersService) ForgotPassword(request *dtos.PasswordResetRequestDTO) error {
+	user, err := u.UsersRepo.GetUserByEmail(request.Email)
+	if err != nil {
+		return err
+	}
+	token := helper.GenerateToken()
+	if token == "" {
+		return errors.New("failed to generate token")
+	}
+	passwordReset := &models.PasswordReset{
+		UserID:    user.ID,
+		Token:     token,
+		ExpiredAt: time.Now().Add(time.Minute * 5),
+		Used:      false,
+	}
+	if err := u.UsersRepo.CreatePasswordReset(passwordReset); err != nil {
+		return err
+	}
+
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s&email=%s", configs.Envs.FRONTEND_URL, token, user.Email)
+	mailBody := fmt.Sprintf("Please click the link below to reset your password:\n\n%s", resetLink)
+
+	if err := helper.SendEmail([]string{user.Email}, "Password Reset", mailBody); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u *UsersService) ValidatePasswordResetToken(token dtos.PasswordResetTokenDTO) error {
+	passwordReset := models.PasswordReset{}
+	err := u.UsersRepo.ValidatePasswordResetToken(&passwordReset, token)
+	if passwordReset.ExpiredAt.Before(time.Now()) {
+		return errors.New("password reset token has expired")
+	}
+	if passwordReset.Used {
+		return errors.New("password reset token has already been used")
+	}
+	return err
+}
+
+func (u *UsersService) ResetPassword(request *dtos.PasswordResetChangeRequestDTO) error {
+	user, err := u.UsersRepo.GetUserByEmail(request.Email)
+	if err != nil {
+		return err
+	}
+	hashPassword, err := helper.HashPassword(request.Password)
+	if err != nil {
+		return err
+	}
+	user.Password = hashPassword
+	return u.UsersRepo.UpdateUser(user)
+}

@@ -35,6 +35,12 @@ func (u *UsersRepo) GetUsersByRole(roleID uint) (*[]models.Users, error) {
 	return &user, err
 }
 
+func (u *UsersRepo) GetUserByEmail(email string) (*models.Users, error) {
+	var user models.Users
+	err := u.db.Model(&models.Users{}).First(&user, "email = ?", email).Error
+	return &user, err
+}
+
 func (u *UsersRepo) CreateUser(user *models.Users) error {
 	return u.db.Create(user).Error
 }
@@ -150,4 +156,17 @@ func (u *UsersRepo) GetUserGLAccounts(userID uint) (*[]models.GLAcc, error) {
 		return nil, err
 	}
 	return &glAccounts, nil
+}
+
+func (u *UsersRepo) CreatePasswordReset(passwordReset *models.PasswordReset) error {
+	return u.db.Create(passwordReset).Error
+}
+
+func (u *UsersRepo) ValidatePasswordResetToken(passwordReset *models.PasswordReset, token dtos.PasswordResetTokenDTO) error {
+	user, err := u.GetUserByEmail(token.Email)
+	if err != nil {
+		return err
+	}
+	err = u.db.First(&passwordReset, "token = ? and user_id = ?", token.Token, user.ID).Error
+	return err
 }

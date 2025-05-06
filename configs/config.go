@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"errors"
 	"os"
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/models"
@@ -25,67 +24,38 @@ type Config struct {
 	SQLACC_API_KEY      string
 	SQLACC_API_URL      string
 	FILTER_GL_CODES     string
+	FRONTEND_URL        string
+}
+
+func getEnvOrDefault(env string, defaultValue string) string {
+	value := os.Getenv(env)
+	if value == "" {
+		if defaultValue != "" {
+			return defaultValue
+		} else {
+			panic("Environment variable " + env + " is not set")
+		}
+	}
+	return value
 }
 
 func loadEnv(env string) *Config {
 	godotenv.Load(env)
 
 	cfg := &Config{}
-	cfg.ServerIP = os.Getenv("SERVER_IP")
-	if cfg.ServerIP == "" {
-		cfg.ServerIP = "localhost"
-	}
-
-	cfg.ServerPort = os.Getenv("SERVER_PORT")
-	if cfg.ServerPort == "" {
-		cfg.ServerPort = "1234"
-	}
-
-	cfg.DBHost = os.Getenv("DB_HOST")
-	if cfg.DBHost == "" {
-		cfg.DBHost = "localhost"
-	}
-
-	cfg.DBUser = os.Getenv("DB_USER")
-	if cfg.DBUser == "" {
-		cfg.DBUser = "root"
-	}
-
-	cfg.DBPassword = os.Getenv("DB_PASSWORD")
-	if cfg.DBPassword == "" {
-		cfg.DBPassword = "root"
-	}
-
-	cfg.DBName = os.Getenv("DB_NAME")
-	if cfg.DBName == "" {
-		cfg.DBName = "test"
-	}
-
-	cfg.DBPort = os.Getenv("DB_PORT")
-	if cfg.DBPort == "" {
-		cfg.DBPort = "3306"
-	}
-
-	cfg.JWTSecret = os.Getenv("JWT_SECRET")
-	if cfg.JWTSecret == "" {
-		panic(errors.New("JWT_SECRET is not set"))
-	}
-
-	cfg.SQLACC_API_PASSWORD = os.Getenv("SQLACC_API_PASSWORD")
-	if cfg.SQLACC_API_PASSWORD == "" {
-		panic(errors.New("SQLACC_API_PASSWORD is not set"))
-	}
-
-	cfg.SQLACC_API_KEY = os.Getenv("SQLACC_API_KEY")
-	if cfg.SQLACC_API_KEY == "" {
-		panic(errors.New("SQLACC_API_KEY is not set"))
-	}
-	cfg.SQLACC_API_URL = os.Getenv("SQLACC_API_URL")
-	if cfg.SQLACC_API_URL == "" {
-		panic(errors.New("SQLACC_API_URL is not set"))
-	}
-
-	cfg.FILTER_GL_CODES = os.Getenv("FILTER_GL_CODES")
+	cfg.ServerIP = getEnvOrDefault("SERVER_IP", "localhost")
+	cfg.ServerPort = getEnvOrDefault("SERVER_PORT", "8080")
+	cfg.DBHost = getEnvOrDefault("DB_HOST", "localhost")
+	cfg.DBUser = getEnvOrDefault("DB_USER", "root")
+	cfg.DBPassword = getEnvOrDefault("DB_PASSWORD", "")
+	cfg.DBName = getEnvOrDefault("DB_NAME", "test")
+	cfg.DBPort = getEnvOrDefault("DB_PORT", "3306")
+	cfg.JWTSecret = getEnvOrDefault("JWT_SECRET", "")
+	cfg.SQLACC_API_PASSWORD = getEnvOrDefault("SQLACC_API_PASSWORD", "")
+	cfg.SQLACC_API_KEY = getEnvOrDefault("SQLACC_API_KEY", "")
+	cfg.SQLACC_API_URL = getEnvOrDefault("SQLACC_API_URL", "")
+	cfg.FILTER_GL_CODES = getEnvOrDefault("FILTER_GL_CODES", "")
+	cfg.FRONTEND_URL = getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
 	return cfg
 }
 
@@ -114,6 +84,7 @@ func (c *Config) InitializedDB() {
 		&models.PaymentMethod{},
 		&models.Project{},
 		&models.GLAcc{},
+		&models.PasswordReset{},
 	)
 
 	var role models.Roles

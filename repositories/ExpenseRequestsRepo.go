@@ -256,7 +256,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		old_expenseRequest.Attachment = expenseRequest.Attachment
 	}
 
-	if old_expenseRequest.Project != expenseRequest.Project && old_expenseRequest.Amount != expenseRequest.Amount {
+	if old_expenseRequest.Project != expenseRequest.Project || old_expenseRequest.Amount != expenseRequest.Amount {
 
 		old_expenseRequest.Project = expenseRequest.Project
 		old_expenseRequest.Amount = expenseRequest.Amount

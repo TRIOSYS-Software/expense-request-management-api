@@ -49,10 +49,15 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 
 	if expenseApproval.Status == "approved" {
 		expenseRequest.CurrentApproverLevel += 1
-		totalApprovals := uint(len(expenseRequest.Approvals))
-		if expenseRequest.CurrentApproverLevel > totalApprovals {
+		// Get the maximum approver level from all approvals
+		var maxLevel uint
+		tx.Model(&models.ExpenseApprovals{}).Where("request_id = ?", expenseRequest.ID).Select("MAX(level)").Scan(&maxLevel)
+
+		// If we've reached or exceeded the maximum level, mark as approved
+		if expenseRequest.CurrentApproverLevel > maxLevel {
 			expenseRequest.Status = "approved"
 		}
+
 		if err := tx.Save(&expenseRequest).Error; err != nil {
 			tx.Rollback()
 			return err

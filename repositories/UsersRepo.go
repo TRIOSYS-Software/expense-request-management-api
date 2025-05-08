@@ -77,19 +77,16 @@ func (u *UsersRepo) SetPaymentMethodsToUser(request *dtos.UserPaymentMethodDTO) 
 		return err
 	}
 
-	if len(paymentMethods) == 0 {
-		tx.Rollback()
-		return fmt.Errorf("payment method not found")
-	}
-
 	if err := tx.Model(&user).Association("PaymentMethods").Clear(); err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	if err := tx.Model(&user).Association("PaymentMethods").Append(paymentMethods); err != nil {
-		tx.Rollback()
-		return err
+	if len(paymentMethods) != 0 {
+		if err := tx.Model(&user).Association("PaymentMethods").Append(paymentMethods); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 
 	return tx.Commit().Error
@@ -125,19 +122,16 @@ func (u *UsersRepo) SetGLAccountsToUser(request *dtos.UserGLAccountDTO) error {
 		return err
 	}
 
-	if len(glAccounts) == 0 {
-		tx.Rollback()
-		return fmt.Errorf("GL account not found")
-	}
-
 	if err := tx.Model(&user).Association("GLAccounts").Clear(); err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	if err := tx.Model(&user).Association("GLAccounts").Append(glAccounts); err != nil {
-		tx.Rollback()
-		return err
+	if len(glAccounts) != 0 {
+		if err := tx.Model(&user).Association("GLAccounts").Append(glAccounts); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 
 	return tx.Commit().Error
@@ -181,4 +175,49 @@ func (u *UsersRepo) UpdatePasswordReset(passwordReset *models.PasswordReset) err
 
 func (u *UsersRepo) DeletePasswordReset(passwordReset *models.PasswordReset) error {
 	return u.db.Delete(&models.PasswordReset{}, "user_id = ?", passwordReset.UserID).Error
+}
+
+func (u *UsersRepo) SetProjectsToUser(request *dtos.UserProjectDTO) error {
+	tx := u.db.Begin()
+
+	var user models.Users
+	if err := tx.Model(&models.Users{}).First(&user, request.UserID).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	var projects []models.Project
+	if err := tx.Find(&projects, "code in (?)", request.Projects).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&user).Association("Projects").Clear(); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if len(projects) != 0 {
+		if err := tx.Model(&user).Association("Projects").Append(projects); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit().Error
+}
+
+func (u *UsersRepo) GetUsersWithProjects() (*[]models.Users, error) {
+	var users []models.Users
+	err := u.db.Select("id, name, email, role_id, department_id").Joins("JOIN users_projects ON users_projects.users_id = users.id").Preload("Projects").Group("users.id").Find(&users).Error
+	return &users, err
+}
+
+func (u *UsersRepo) GetUserProjects(userID uint) (*[]models.Project, error) {
+	var projects []models.Project
+	err := u.db.Joins("JOIN users_projects ON users_projects.project_code = projects.code").Where("users_projects.users_id = ?", userID).Find(&projects).Error
+	if err != nil {
+		return nil, err
+	}
+	return &projects, nil
 }

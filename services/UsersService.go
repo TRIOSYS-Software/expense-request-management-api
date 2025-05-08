@@ -195,3 +195,15 @@ func (u *UsersService) ResetPassword(request *dtos.PasswordResetChangeRequestDTO
 	}
 	return nil
 }
+
+func (u *UsersService) SetProjectsToUser(request *dtos.UserProjectDTO) error {
+	return u.UsersRepo.SetProjectsToUser(request)
+}
+
+func (u *UsersService) GetUsersWithProjects() (*[]models.Users, error) {
+	return u.UsersRepo.GetUsersWithProjects()
+}
+
+func (u *UsersService) GetUserProjects(userID uint) (*[]models.Project, error) {
+	return u.UsersRepo.GetUserProjects(userID)
+}

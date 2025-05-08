@@ -48,6 +48,9 @@ func initUsersRoutes(e *echo.Group, db *gorm.DB) {
 	e.POST("/forgot-password", usersController.ForgotPassword)
 	e.POST("/validate-password-reset-token", usersController.ValidatePasswordResetToken)
 	e.POST("/reset-password", usersController.ResetPassword)
+	e.POST("/users/set-projects", usersController.SetProjectsToUser, middlewares.IsAuthenticated)
+	e.GET("/users/projects", usersController.GetUsersWithProjects, middlewares.IsAuthenticated)
+	e.GET("/users/:id/projects", usersController.GetProjectsByUserID, middlewares.IsAuthenticated)
 }
 
 func initDepartmentsRoutes(e *echo.Group, db *gorm.DB) {

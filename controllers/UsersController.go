@@ -240,3 +240,39 @@ func (u *UsersController) ResetPassword(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
 }
+
+func (u *UsersController) SetProjectsToUser(c echo.Context) error {
+	userProjectDTO := new(dtos.UserProjectDTO)
+	if err := c.Bind(userProjectDTO); err != nil {
+		log.Printf("Error binding projects to user: %v", err)
+		return c.JSON(http.StatusBadRequest, err)
+	}
+	if err := u.UsersService.SetProjectsToUser(userProjectDTO); err != nil {
+		log.Printf("Error setting projects to user: %v", err)
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+	return c.JSON(http.StatusOK, "Projects set successfully")
+}
+
+func (u *UsersController) GetProjectsByUserID(ctx echo.Context) error {
+	userID := ctx.Param("id")
+	id, err := strconv.Atoi(userID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, "Invalid user id")
+	}
+	projects, err := u.UsersService.GetUserProjects(uint(id))
+	if err != nil {
+		log.Println(err)
+		return ctx.JSON(http.StatusNotFound, err)
+	}
+	return ctx.JSON(http.StatusOK, projects)
+}
+
+func (u *UsersController) GetUsersWithProjects(c echo.Context) error {
+	users, err := u.UsersService.GetUsersWithProjects()
+	if err != nil {
+		log.Printf("Error getting users with projects: %v", err)
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+	return c.JSON(http.StatusOK, users)
+}

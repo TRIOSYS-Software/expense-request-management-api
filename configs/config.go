@@ -25,6 +25,10 @@ type Config struct {
 	SQLACC_API_URL      string
 	FILTER_GL_CODES     string
 	FRONTEND_URL        string
+	EMAIL_USERNAME      string
+	EMAIL_PASSWORD      string
+	SMTP_HOST           string
+	SMTP_PORT           string
 }
 
 func getEnvOrDefault(env string, defaultValue string) string {
@@ -56,6 +60,11 @@ func loadEnv(env string) *Config {
 	cfg.SQLACC_API_URL = getEnvOrDefault("SQLACC_API_URL", "")
 	cfg.FILTER_GL_CODES = getEnvOrDefault("FILTER_GL_CODES", "")
 	cfg.FRONTEND_URL = getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+	cfg.EMAIL_USERNAME = getEnvOrDefault("EMAIL_USERNAME", "")
+	cfg.EMAIL_PASSWORD = getEnvOrDefault("EMAIL_PASSWORD", "")
+	cfg.SMTP_HOST = getEnvOrDefault("SMTP_HOST", "")
+	cfg.SMTP_PORT = getEnvOrDefault("SMTP_PORT", "587")
+
 	return cfg
 }
 

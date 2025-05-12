@@ -8,6 +8,7 @@ import (
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
+	"shwetaik-expense-management-api/utilities"
 
 	"time"
 
@@ -156,7 +157,7 @@ func (u *UsersService) ForgotPassword(request *dtos.PasswordResetRequestDTO) err
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s&email=%s", configs.Envs.FRONTEND_URL, token, user.Email)
 	mailBody := fmt.Sprintf("Please click the link below to reset your password:\n\n%s", resetLink)
 
-	if err := helper.SendEmail([]string{user.Email}, "Password Reset", mailBody); err != nil {
+	if err := utilities.SendMailViaMailcow([]string{user.Email}, "Password Reset", mailBody); err != nil {
 		return err
 	}
 

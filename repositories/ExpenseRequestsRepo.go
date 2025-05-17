@@ -246,7 +246,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	old_expenseRequest.PaymentMethod = expenseRequest.PaymentMethod
 	old_expenseRequest.GLAccount = expenseRequest.GLAccount
 
-	if old_expenseRequest.Attachment != expenseRequest.Attachment {
+	if expenseRequest.Attachment != nil && *expenseRequest.Attachment != "" {
 		if old_expenseRequest.Attachment != nil {
 			oldFilePath := filepath.Join("uploads", *old_expenseRequest.Attachment)
 			if _, err := os.Stat(oldFilePath); err == nil {

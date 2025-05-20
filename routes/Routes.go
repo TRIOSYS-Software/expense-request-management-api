@@ -24,6 +24,8 @@ func InitialRoute(e *echo.Echo, db *gorm.DB) {
 	initPaymentMethodsRoutes(apiV1, db)
 	initProjectsRoutes(apiV1, db)
 	initGLAccRoutes(apiV1, db)
+
+	initWebsocketRoutes(e)
 }
 
 func initUsersRoutes(e *echo.Group, db *gorm.DB) {
@@ -171,4 +173,8 @@ func initGLAccRoutes(e *echo.Group, db *gorm.DB) {
 			log.Println("GLAcc synced successfully")
 		}
 	}()
+}
+
+func initWebsocketRoutes(e *echo.Echo) {
+	e.GET("/ws/:userID", controllers.HandleWebSocket)
 }

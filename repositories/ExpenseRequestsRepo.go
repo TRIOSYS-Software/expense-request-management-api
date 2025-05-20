@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"shwetaik-expense-management-api/models"
+	"shwetaik-expense-management-api/utilities"
 
 	"gorm.io/gorm"
 )
@@ -142,6 +143,12 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		if err := tx.Create(&expenseApprovals).Error; err != nil {
 			tx.Rollback()
 			return err
+		}
+
+		// Send websocket message to the first approver
+		if i == 0 {
+			// Replace with actual websocket sending logic
+			go utilities.SendWebSocketMessage(approverPolicyUser.UserID, "You have a new expense request to approve.")
 		}
 	}
 	return tx.Commit().Error

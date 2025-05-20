@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"shwetaik-expense-management-api/models"
+	"shwetaik-expense-management-api/utilities"
 
 	"gorm.io/gorm"
 )
@@ -67,6 +68,8 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 	expenseApprovalToUpdate.Status = expenseApproval.Status
 	expenseApprovalToUpdate.Comments = expenseApproval.Comments
 	expenseApprovalToUpdate.ApprovalDate = expenseApproval.ApprovalDate
+
+	go utilities.SendWebSocketMessage(expenseApprovalToUpdate.ApproverID, "Expense request has been updated")
 
 	if err := tx.Save(&expenseApprovalToUpdate).Error; err != nil {
 		tx.Rollback()

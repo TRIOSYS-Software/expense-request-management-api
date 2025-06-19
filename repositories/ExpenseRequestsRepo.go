@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/utilities"
 
@@ -57,9 +58,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.Expen
 	return expenseRequests
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (map[string]any, error) {
+func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
 	var expenseRequests []models.ExpenseRequests
-	var summary = make(map[string]any)
+	var summary dtos.ExpenseRequestSummary
 
 	db := r.db.Model(&models.ExpenseRequests{}).Preload("Approvals")
 	if filters["user_id"] != nil {
@@ -71,7 +72,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 	if filters["start_date"] != nil && filters["end_date"] != nil {
 		db = db.Where("date_submitted BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
-		summary["daily_totals"] = make(map[string]float64)
+		summary.DailyTotal = make(map[string]float64)
 	}
 
 	if filters["amount"] != nil {
@@ -85,26 +86,21 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 	db.Find(&expenseRequests)
 
-	summary["total"] = len(expenseRequests)
-	summary["pending"] = 0
-	summary["approved"] = 0
-	summary["rejected"] = 0
-	summary["total_amount"] = 0.00
-
 	for _, expenseRequest := range expenseRequests {
-		summary["total_amount"] = summary["total_amount"].(float64) + expenseRequest.Amount
+		summary.TotalAmount = summary.TotalAmount + expenseRequest.Amount
 		if expenseRequest.Status == "pending" {
-			summary["pending"] = summary["pending"].(int) + 1
+			summary.Pending = summary.Pending + 1
 		} else if expenseRequest.Status == "approved" {
-			summary["approved"] = summary["approved"].(int) + 1
+			summary.Approved = summary.Approved + 1
 		} else if expenseRequest.Status == "rejected" {
-			summary["rejected"] = summary["rejected"].(int) + 1
+			summary.Rejected = summary.Rejected + 1
 		}
 
 		if filters["start_date"] != nil && filters["end_date"] != nil {
 			date := expenseRequest.DateSubmitted.Format("2006-01-02")
-			summary["daily_totals"].(map[string]float64)[date] = summary["daily_totals"].(map[string]float64)[date] + expenseRequest.Amount
+			summary.DailyTotal[date] = summary.DailyTotal[date] + expenseRequest.Amount
 		}
+
 	}
 	return summary, nil
 }

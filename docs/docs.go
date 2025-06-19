@@ -258,6 +258,544 @@ const docTemplate = `{
                 }
             }
         },
+        "/expense-approvals/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Update a expense approval",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseApprovals"
+                ],
+                "summary": "Update a expense approval",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ExpenseApproval ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ExpenseApproval",
+                        "name": "ExpenseApproval",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseApprovals"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseApprovals"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/expense-requests": {
+            "post": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Create a new expense request",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Create a new expense request",
+                "parameters": [
+                    {
+                        "description": "ExpenseRequest",
+                        "name": "ExpenseRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseRequests"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseRequests"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/expense-requests/approvers/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Get expense requests by approver ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Get expense requests by approver ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Approver ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ExpenseRequests"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/expense-requests/attachment/{filename}": {
+            "get": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Serve expense request attachment",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Serve expense request attachment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Attachment filename",
+                        "name": "filename",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/expense-requests/summary": {
+            "get": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Get a expense request summary",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Get a expense request summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Category id",
+                        "name": "category_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "User id",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Approver id",
+                        "name": "approver_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dtos.ExpenseRequestSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/expense-requests/user/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Get a expense request by user id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Get a expense request by user id",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseRequests"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/expense-requests/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Get a expense request by id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Get a expense request by id",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Expense request id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseRequests"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Update an expense request",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Update an expense request",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ExpenseRequest ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ExpenseRequest",
+                        "name": "ExpenseRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseRequests"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseRequests"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Delete an expense request",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Delete an expense request",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ExpenseRequest ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/expense-requests/{id}/sqlacc": {
+            "post": {
+                "security": [
+                    {
+                        "JWT Token": []
+                    }
+                ],
+                "description": "Send an expense request to SQLACC",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ExpenseRequests"
+                ],
+                "summary": "Send an expense request to SQLACC",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ExpenseRequest ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/forgot-password": {
             "post": {
                 "security": [
@@ -1198,6 +1736,32 @@ const docTemplate = `{
                 }
             }
         },
+        "dtos.ExpenseRequestSummary": {
+            "type": "object",
+            "properties": {
+                "approved": {
+                    "type": "integer"
+                },
+                "daily_totals": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "rejected": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_amount": {
+                    "type": "number"
+                }
+            }
+        },
         "dtos.LoginRequestDTO": {
             "type": "object",
             "properties": {
@@ -1314,6 +1878,108 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ExpenseApprovals": {
+            "type": "object",
+            "properties": {
+                "approval_date": {
+                    "type": "string"
+                },
+                "approver_id": {
+                    "type": "integer"
+                },
+                "comments": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_final": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "users": {
+                    "description": "ExpenseRequests ExpenseRequests ` + "`" + `json:\"expense_requests,omitempty\" gorm:\"foreignKey:RequestID;references:ID\"` + "`" + `",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Users"
+                        }
+                    ]
+                }
+            }
+        },
+        "models.ExpenseRequests": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "approvals": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ExpenseApprovals"
+                    }
+                },
+                "attachment": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "current_approver_level": {
+                    "type": "integer"
+                },
+                "date_submitted": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "gl_account": {
+                    "type": "string"
+                },
+                "gl_accounts": {
+                    "$ref": "#/definitions/models.GLAcc"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_send_to_sql_acc": {
+                    "type": "boolean"
+                },
+                "payment_method": {
+                    "type": "string"
+                },
+                "payment_methods": {
+                    "$ref": "#/definitions/models.PaymentMethod"
+                },
+                "project": {
+                    "type": "string"
+                },
+                "projects": {
+                    "$ref": "#/definitions/models.Project"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/models.Users"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },

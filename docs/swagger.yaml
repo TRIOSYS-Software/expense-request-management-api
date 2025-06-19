@@ -7,6 +7,23 @@ definitions:
       old_password:
         type: string
     type: object
+  dtos.ExpenseRequestSummary:
+    properties:
+      approved:
+        type: integer
+      daily_totals:
+        additionalProperties:
+          type: number
+        type: object
+      pending:
+        type: integer
+      rejected:
+        type: integer
+      total:
+        type: integer
+      total_amount:
+        type: number
+    type: object
   dtos.LoginRequestDTO:
     properties:
       email:
@@ -81,6 +98,73 @@ definitions:
         type: integer
       name:
         type: string
+    type: object
+  models.ExpenseApprovals:
+    properties:
+      approval_date:
+        type: string
+      approver_id:
+        type: integer
+      comments:
+        type: string
+      id:
+        type: integer
+      is_final:
+        type: boolean
+      level:
+        type: integer
+      request_id:
+        type: integer
+      status:
+        type: string
+      users:
+        allOf:
+        - $ref: '#/definitions/models.Users'
+        description: ExpenseRequests ExpenseRequests `json:"expense_requests,omitempty"
+          gorm:"foreignKey:RequestID;references:ID"`
+    type: object
+  models.ExpenseRequests:
+    properties:
+      amount:
+        type: number
+      approvals:
+        items:
+          $ref: '#/definitions/models.ExpenseApprovals'
+        type: array
+      attachment:
+        type: string
+      created_at:
+        type: string
+      current_approver_level:
+        type: integer
+      date_submitted:
+        type: string
+      description:
+        type: string
+      gl_account:
+        type: string
+      gl_accounts:
+        $ref: '#/definitions/models.GLAcc'
+      id:
+        type: integer
+      is_send_to_sql_acc:
+        type: boolean
+      payment_method:
+        type: string
+      payment_methods:
+        $ref: '#/definitions/models.PaymentMethod'
+      project:
+        type: string
+      projects:
+        $ref: '#/definitions/models.Project'
+      status:
+        type: string
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.Users'
+      user_id:
+        type: integer
     type: object
   models.GLAcc:
     properties:
@@ -351,6 +435,348 @@ paths:
       summary: Update a department
       tags:
       - Departments
+  /expense-approvals/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update a expense approval
+      parameters:
+      - description: ExpenseApproval ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: ExpenseApproval
+        in: body
+        name: ExpenseApproval
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExpenseApprovals'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseApprovals'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Update a expense approval
+      tags:
+      - ExpenseApprovals
+  /expense-requests:
+    post:
+      consumes:
+      - application/json
+      description: Create a new expense request
+      parameters:
+      - description: ExpenseRequest
+        in: body
+        name: ExpenseRequest
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExpenseRequests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Create a new expense request
+      tags:
+      - ExpenseRequests
+  /expense-requests/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an expense request
+      parameters:
+      - description: ExpenseRequest ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Delete an expense request
+      tags:
+      - ExpenseRequests
+    get:
+      consumes:
+      - application/json
+      description: Get a expense request by id
+      parameters:
+      - description: Expense request id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a expense request by id
+      tags:
+      - ExpenseRequests
+    put:
+      consumes:
+      - application/json
+      description: Update an expense request
+      parameters:
+      - description: ExpenseRequest ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: ExpenseRequest
+        in: body
+        name: ExpenseRequest
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExpenseRequests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Update an expense request
+      tags:
+      - ExpenseRequests
+  /expense-requests/{id}/sqlacc:
+    post:
+      consumes:
+      - application/json
+      description: Send an expense request to SQLACC
+      parameters:
+      - description: ExpenseRequest ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Send an expense request to SQLACC
+      tags:
+      - ExpenseRequests
+  /expense-requests/approvers/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get expense requests by approver ID
+      parameters:
+      - description: Approver ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ExpenseRequests'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get expense requests by approver ID
+      tags:
+      - ExpenseRequests
+  /expense-requests/attachment/{filename}:
+    get:
+      consumes:
+      - application/json
+      description: Serve expense request attachment
+      parameters:
+      - description: Attachment filename
+        in: path
+        name: filename
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Serve expense request attachment
+      tags:
+      - ExpenseRequests
+  /expense-requests/summary:
+    get:
+      consumes:
+      - application/json
+      description: Get a expense request summary
+      parameters:
+      - description: Start date
+        in: query
+        name: start_date
+        type: string
+      - description: End date
+        in: query
+        name: end_date
+        type: string
+      - description: Category id
+        in: query
+        name: category_id
+        type: integer
+      - description: User id
+        in: query
+        name: user_id
+        type: integer
+      - description: Approver id
+        in: query
+        name: approver_id
+        type: integer
+      - description: Status
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dtos.ExpenseRequestSummary'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a expense request summary
+      tags:
+      - ExpenseRequests
+  /expense-requests/user/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get a expense request by user id
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a expense request by user id
+      tags:
+      - ExpenseRequests
   /forgot-password:
     post:
       consumes:

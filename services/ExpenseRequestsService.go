@@ -7,6 +7,7 @@ import (
 	"net/http"
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/configs"
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
 	"strings"
@@ -32,7 +33,7 @@ func (s *ExpenseRequestsService) GetExpenseRequestsByUserID(id uint) []models.Ex
 	return s.ExpenseRequestsRepo.GetExpenseRequestsByUserID(id)
 }
 
-func (s *ExpenseRequestsService) GetExpenseRequestsSummary(filters map[string]any) (map[string]any, error) {
+func (s *ExpenseRequestsService) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
 	return s.ExpenseRequestsRepo.GetExpenseRequestsSummary(filters)
 }
 

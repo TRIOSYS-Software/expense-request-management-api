@@ -29,6 +29,18 @@ func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
 	return c.JSON(http.StatusOK, expenseRequests)
 }
 
+// GetExpenseRequestByID returns a expense request by id
+// @Summary Get a expense request by id
+// @Description Get a expense request by id
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param id path int true "Expense request id"
+// @Success 200 {object} models.ExpenseRequests
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/{id} [get]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
@@ -42,6 +54,18 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error
 	return c.JSON(http.StatusOK, expenseRequest)
 }
 
+// GetExpenseRequestsByUserID returns a expense request by user id
+// @Summary Get a expense request by user id
+// @Description Get a expense request by user id
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param id path int true "User id"
+// @Success 200 {object} models.ExpenseRequests
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/user/{id} [get]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
@@ -52,6 +76,23 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 	return c.JSON(http.StatusOK, expenseRequests)
 }
 
+// GetExpenseRequestsSummary returns a expense request summary
+// @Summary Get a expense request summary
+// @Description Get a expense request summary
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param start_date query string false "Start date"
+// @Param end_date query string false "End date"
+// @Param category_id query int false "Category id"
+// @Param user_id query int false "User id"
+// @Param approver_id query int false "Approver id"
+// @Param status query string false "Status"
+// @Success 200 {object} dtos.ExpenseRequestSummary
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/summary [get]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) error {
 	filters := make(map[string]any)
 	if c.QueryParam("start_date") != "" {
@@ -106,6 +147,18 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) e
 	return c.JSON(http.StatusOK, summary)
 }
 
+// CreateExpenseRequest creates a new expense request
+// @Summary Create a new expense request
+// @Description Create a new expense request
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param ExpenseRequest body models.ExpenseRequests true "ExpenseRequest"
+// @Success 200 {object} models.ExpenseRequests
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests [post]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error {
 	expenseRequest := new(models.ExpenseRequests)
 	if err := c.Bind(expenseRequest); err != nil {
@@ -148,6 +201,18 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 	return c.JSON(http.StatusOK, expenseRequest)
 }
 
+// GetExpenseRequestByApproverID returns a list of expense requests by approver ID
+// @Summary Get expense requests by approver ID
+// @Description Get expense requests by approver ID
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param id path int true "Approver ID"
+// @Success 200 {object} []models.ExpenseRequests
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/approvers/{id} [get]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
@@ -158,6 +223,18 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	return c.JSON(http.StatusOK, expenseRequests)
 }
 
+// SendExpenseRequestToSQLACC sends an expense request to SQLACC
+// @Summary Send an expense request to SQLACC
+// @Description Send an expense request to SQLACC
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param id path int true "ExpenseRequest ID"
+// @Success 200 {object} string
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/{id}/sqlacc [post]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -169,6 +246,19 @@ func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) 
 	return c.JSON(http.StatusOK, "Expense request sent to SQLACC successfully")
 }
 
+// UpdateExpenseRequest updates an expense request
+// @Summary Update an expense request
+// @Description Update an expense request
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param id path int true "ExpenseRequest ID"
+// @Param ExpenseRequest body models.ExpenseRequests true "ExpenseRequest"
+// @Success 200 {object} models.ExpenseRequests
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/{id} [put]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -211,6 +301,18 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 	return c.JSON(http.StatusOK, expenseRequest)
 }
 
+// DeleteExpenseRequest deletes an expense request
+// @Summary Delete an expense request
+// @Description Delete an expense request
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param id path int true "ExpenseRequest ID"
+// @Success 200 {object} string
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/{id} [delete]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -222,6 +324,18 @@ func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error 
 	return c.JSON(http.StatusOK, "Expense request deleted successfully")
 }
 
+// ServeExpenseRequestAttachment serve expense request attachment
+// @Summary Serve expense request attachment
+// @Description Serve expense request attachment
+// @Tags ExpenseRequests
+// @Accept json
+// @Produce json
+// @Param filename path string true "Attachment filename"
+// @Success 200 {file} file
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-requests/attachment/{filename} [get]
+// @Security JWT Token
 func (ex *ExpenseRequestsController) ServeExpenseRequestAttachment(c echo.Context) error {
 	file := c.Param("filename")
 	workingDir, err := os.Getwd()

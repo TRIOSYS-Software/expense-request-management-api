@@ -200,6 +200,157 @@ info:
   title: Expense Request System API
   version: "1.0"
 paths:
+  /departments:
+    get:
+      consumes:
+      - application/json
+      description: Get all departments
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Departments'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get all departments
+      tags:
+      - Departments
+    post:
+      consumes:
+      - application/json
+      description: Create a new department
+      parameters:
+      - description: Department
+        in: body
+        name: department
+        required: true
+        schema:
+          $ref: '#/definitions/models.Departments'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Departments'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Create a new department
+      tags:
+      - Departments
+  /departments/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a department
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Delete a department
+      tags:
+      - Departments
+    get:
+      consumes:
+      - application/json
+      description: Get a department by id
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Departments'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a department by id
+      tags:
+      - Departments
+    put:
+      consumes:
+      - application/json
+      description: Update a department
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Department
+        in: body
+        name: department
+        required: true
+        schema:
+          $ref: '#/definitions/models.Departments'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Departments'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Update a department
+      tags:
+      - Departments
   /forgot-password:
     post:
       consumes:

@@ -809,6 +809,53 @@ paths:
       summary: Forgot password
       tags:
       - Users
+  /gl-acc:
+    get:
+      consumes:
+      - application/json
+      description: Get GLAcc data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.GLAcc'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Get GLAcc
+      tags:
+      - GLAcc
+  /gl-acc/sync:
+    post:
+      consumes:
+      - application/json
+      description: Sync GLAcc data from SQLAcc API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Sync GLAcc
+      tags:
+      - GLAcc
   /login:
     post:
       consumes:
@@ -841,6 +888,97 @@ paths:
       summary: Login user
       tags:
       - Users
+  /payment-methods:
+    get:
+      consumes:
+      - application/json
+      description: Fetches payment methods
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.PaymentMethod'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get payment methods
+      tags:
+      - Payment Method
+  /payment-methods/sync:
+    post:
+      consumes:
+      - application/json
+      description: Synchronizes payment methods from the SQLACC API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Sync payment methods
+      tags:
+      - Payment Method
+  /projects:
+    get:
+      consumes:
+      - application/json
+      description: Fetches projects
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Project'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Get projects
+      tags:
+      - Project
+  /projects/sync:
+    post:
+      consumes:
+      - application/json
+      description: Synchronizes projects
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Sync projects
+      tags:
+      - Project
   /reset-password:
     post:
       consumes:

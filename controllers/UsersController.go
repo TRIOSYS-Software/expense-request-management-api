@@ -95,10 +95,11 @@ func (u *UsersController) CreateUser(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, err)
 	}
 	user := models.Users{
-		Name:     request.Name,
-		Email:    request.Email,
-		Password: request.Password,
-		RoleID:   request.Role,
+		Name:         request.Name,
+		Email:        request.Email,
+		Password:     request.Password,
+		RoleID:       request.Role,
+		DepartmentID: request.Department,
 	}
 	if err := u.UsersService.CreateUser(&user); err != nil {
 		return c.JSON(http.StatusNotFound, err)

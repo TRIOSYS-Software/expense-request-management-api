@@ -17,5 +17,5 @@ type UserRequestDTO struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`
 	Role       uint   `json:"role"`
-	Department uint   `json:"department"`
+	Department *uint  `json:"department"`
 }

@@ -45,7 +45,9 @@ func main() {
 
 	cfg.InitializedDB()
 
-	e.GET("/swagger/*", echoSwagger.WrapHandler)
+	if cfg.Environment == "dev" {
+		e.GET("/swagger/*", echoSwagger.WrapHandler)
+	}
 	routes.InitialRoute(e, cfg.DB)
 
 	e.Logger.Fatal(e.Start(cfg.ServerIP + ":" + cfg.ServerPort))

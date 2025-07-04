@@ -29,6 +29,7 @@ type Config struct {
 	EMAIL_PASSWORD      string
 	SMTP_HOST           string
 	SMTP_PORT           string
+	Environment         string
 }
 
 func getEnvOrDefault(env string, defaultValue string) string {
@@ -64,6 +65,7 @@ func loadEnv(env string) *Config {
 	cfg.EMAIL_PASSWORD = getEnvOrDefault("EMAIL_PASSWORD", "")
 	cfg.SMTP_HOST = getEnvOrDefault("SMTP_HOST", "")
 	cfg.SMTP_PORT = getEnvOrDefault("SMTP_PORT", "587")
+	cfg.Environment = getEnvOrDefault("ENVIRONMENT", "dev")
 
 	return cfg
 }

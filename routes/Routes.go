@@ -21,6 +21,7 @@ func InitialRoute(e *echo.Echo, db *gorm.DB) {
 	initExpenseCategoriesRoutes(apiV1, db)
 	initExpenseRequestsRoutes(apiV1, db)
 	initExpenseApprovalsRoutes(apiV1, db)
+	initNotificationRoutes(apiV1, db)
 	initPaymentMethodsRoutes(apiV1, db)
 	initProjectsRoutes(apiV1, db)
 	initGLAccRoutes(apiV1, db)
@@ -122,6 +123,18 @@ func initExpenseApprovalsRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/expense-approvals", expenseApprovalsController.GetExpenseApprovals, middlewares.IsAuthenticated)
 	e.GET("/expense-approvals/approver/:approver_id", expenseApprovalsController.GetExpenseApprovalsByApproverID, middlewares.IsAuthenticated)
 	e.PUT("/expense-approvals/:id", expenseApprovalsController.UpdateExpenseApproval, middlewares.IsAuthenticated)
+}
+
+func initNotificationRoutes(e *echo.Group, db *gorm.DB) {
+	notificationRepo := repositories.NewNotificationRepo(db)
+	notificationService := services.NewNotificationService(notificationRepo)
+	notificationController := controllers.NewNotificationController(notificationService)
+
+	e.GET("/notifications/user/:userID", notificationController.GetNotificationsByUserID, middlewares.IsAuthenticated)
+	e.PUT("/notifications/:id/read", notificationController.MarkNotificationAsRead, middlewares.IsAuthenticated)
+	e.PUT("/notifications/user/:userID/mark-all-read", notificationController.MarkAllNotificationsAsRead, middlewares.IsAuthenticated)
+	e.DELETE("/notifications/:id", notificationController.DeleteNotification, middlewares.IsAuthenticated)
+	e.DELETE("/notifications/user/:userID/clear", notificationController.ClearAllNotifications, middlewares.IsAuthenticated)
 }
 
 func initPaymentMethodsRoutes(e *echo.Group, db *gorm.DB) {

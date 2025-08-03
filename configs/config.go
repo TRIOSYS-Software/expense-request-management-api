@@ -96,6 +96,7 @@ func (c *Config) InitializedDB() {
 		&models.Project{},
 		&models.GLAcc{},
 		&models.PasswordReset{},
+		&models.Notification{},
 	)
 
 	var role models.Roles

@@ -2,21 +2,27 @@ package repositories
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/utilities"
+	"time"
 
 	"gorm.io/gorm"
 )
 
 type ExpenseRequestsRepo struct {
-	db *gorm.DB
+	db               *gorm.DB
+	notificationRepo *NotificationRepo
 }
 
 func NewExpenseRequestsRepo(db *gorm.DB) *ExpenseRequestsRepo {
-	return &ExpenseRequestsRepo{db: db}
+	return &ExpenseRequestsRepo{
+		db:               db,
+		notificationRepo: NewNotificationRepo(db),
+	}
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
@@ -107,12 +113,41 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
 	tx := r.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			log.Printf("PANIC recovered in CreateExpenseRequest: %v", r)
+		}
+	}()
+
 	if err := tx.Create(expenseRequest).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
+
 	var requestUser models.Users
-	tx.Where("id = ?", expenseRequest.UserID).First(&requestUser)
+	err := tx.Preload("Roles").Preload("Departments").Where("id = ?", expenseRequest.UserID).First(&requestUser).Error
+	if err != nil {
+		tx.Rollback()
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("requesting user with ID %d not found", expenseRequest.UserID)
+		}
+		return fmt.Errorf("failed to retrieve requesting user: %w", err)
+	}
+
+	if requestUser.DepartmentID == nil {
+		tx.Rollback()
+		return fmt.Errorf("requesting user (ID %d - %s) has no department assigned", requestUser.ID, requestUser.Name)
+	}
+
+	// Safely get user's role name, as Roles is a *Roles
+	var userRoleName string
+	if requestUser.Roles != nil {
+		userRoleName = requestUser.Roles.Name
+	} else {
+		userRoleName = "Unknown Role"
+		log.Printf("WARN: User %d (%s) has no role assigned or role not found for role_id: %d", requestUser.ID, requestUser.Name, requestUser.RoleID)
+	}
 
 	approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
 	if err != nil {
@@ -141,10 +176,38 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
-		// Send websocket message to the first approver
 		if i == 0 {
-			// Replace with actual websocket sending logic
-			go utilities.SendWebSocketMessage(approverPolicyUser.UserID, "You have a new expense request to approve.")
+			message := fmt.Sprintf(
+				"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
+				requestUser.Name,
+				userRoleName,
+				expenseRequest.ID,
+				expenseRequest.Amount,
+			)
+			notificationType := "new_request"
+
+			notification := &models.Notification{
+				UserID:    approverPolicyUser.UserID,
+				ExpenseID: expenseRequest.ID,
+				Message:   message,
+				Type:      notificationType,
+				IsRead:    false,
+			}
+			if err := r.notificationRepo.CreateNotification(notification); err != nil {
+				log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
+			}
+
+			go utilities.SendWebSocketMessage(
+				approverPolicyUser.UserID,
+				utilities.WebSocketMessagePayload{
+					ID:        notification.ID,
+					Message:   message,
+					Type:      notificationType,
+					ExpenseID: expenseRequest.ID,
+					IsRead:    false,
+					CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+				},
+			)
 		}
 	}
 	return tx.Commit().Error

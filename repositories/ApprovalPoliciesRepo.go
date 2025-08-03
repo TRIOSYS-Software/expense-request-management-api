@@ -86,6 +86,7 @@ func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, ma
 		if err := db.Model(&models.ApprovalPolicies{}).
 			Where("project = ?", project).
 			Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount).
+			Where("department_id IS NULL").
 			Count(&count).Error; err != nil {
 			return false
 		}

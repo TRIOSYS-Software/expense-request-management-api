@@ -16,6 +16,16 @@ func NewProjectController(projectService *services.ProjectService) *ProjectContr
 	return &ProjectController{projectService: projectService}
 }
 
+// SyncProjects synchronizes projects
+// @Summary Sync projects
+// @Description Synchronizes projects
+// @Accept json
+// @Produce json
+// @Tags Project
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /projects/sync [post]
+// @Security JWT Token
 func (c *ProjectController) SyncProjects(ctx echo.Context) error {
 	err := c.projectService.SyncProjects()
 	if err != nil {
@@ -29,6 +39,16 @@ func (c *ProjectController) SyncProjects(ctx echo.Context) error {
 	})
 }
 
+// GetProjects fetches projects
+// @Summary Get projects
+// @Description Fetches projects
+// @Tags Project
+// @Accept json
+// @Produce json
+// @Success 200 {object} []models.Project
+// @Failure 500 {object} map[string]interface{}
+// @Router /projects [get]
+// @Security JWT Token
 func (c *ProjectController) GetProjects(ctx echo.Context) error {
 	projects, err := c.projectService.GetProjects()
 	if err != nil {

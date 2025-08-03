@@ -2,19 +2,27 @@ package repositories
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
+	"shwetaik-expense-management-api/utilities"
+	"time"
 
 	"gorm.io/gorm"
 )
 
 type ExpenseRequestsRepo struct {
-	db *gorm.DB
+	db               *gorm.DB
+	notificationRepo *NotificationRepo
 }
 
 func NewExpenseRequestsRepo(db *gorm.DB) *ExpenseRequestsRepo {
-	return &ExpenseRequestsRepo{db: db}
+	return &ExpenseRequestsRepo{
+		db:               db,
+		notificationRepo: NewNotificationRepo(db),
+	}
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
@@ -56,9 +64,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.Expen
 	return expenseRequests
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (map[string]any, error) {
+func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
 	var expenseRequests []models.ExpenseRequests
-	var summary = make(map[string]any)
+	var summary dtos.ExpenseRequestSummary
 
 	db := r.db.Model(&models.ExpenseRequests{}).Preload("Approvals")
 	if filters["user_id"] != nil {
@@ -70,7 +78,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 	if filters["start_date"] != nil && filters["end_date"] != nil {
 		db = db.Where("date_submitted BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
-		summary["daily_totals"] = make(map[string]float64)
+		summary.DailyTotal = make(map[string]float64)
 	}
 
 	if filters["amount"] != nil {
@@ -84,38 +92,62 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 	db.Find(&expenseRequests)
 
-	summary["total"] = len(expenseRequests)
-	summary["pending"] = 0
-	summary["approved"] = 0
-	summary["rejected"] = 0
-	summary["total_amount"] = 0.00
-
 	for _, expenseRequest := range expenseRequests {
-		summary["total_amount"] = summary["total_amount"].(float64) + expenseRequest.Amount
+		summary.TotalAmount = summary.TotalAmount + expenseRequest.Amount
 		if expenseRequest.Status == "pending" {
-			summary["pending"] = summary["pending"].(int) + 1
+			summary.Pending = summary.Pending + 1
 		} else if expenseRequest.Status == "approved" {
-			summary["approved"] = summary["approved"].(int) + 1
+			summary.Approved = summary.Approved + 1
 		} else if expenseRequest.Status == "rejected" {
-			summary["rejected"] = summary["rejected"].(int) + 1
+			summary.Rejected = summary.Rejected + 1
 		}
 
 		if filters["start_date"] != nil && filters["end_date"] != nil {
 			date := expenseRequest.DateSubmitted.Format("2006-01-02")
-			summary["daily_totals"].(map[string]float64)[date] = summary["daily_totals"].(map[string]float64)[date] + expenseRequest.Amount
+			summary.DailyTotal[date] = summary.DailyTotal[date] + expenseRequest.Amount
 		}
+
 	}
 	return summary, nil
 }
 
 func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
 	tx := r.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			log.Printf("PANIC recovered in CreateExpenseRequest: %v", r)
+		}
+	}()
+
 	if err := tx.Create(expenseRequest).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
+
 	var requestUser models.Users
-	tx.Where("id = ?", expenseRequest.UserID).First(&requestUser)
+	err := tx.Preload("Roles").Preload("Departments").Where("id = ?", expenseRequest.UserID).First(&requestUser).Error
+	if err != nil {
+		tx.Rollback()
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("requesting user with ID %d not found", expenseRequest.UserID)
+		}
+		return fmt.Errorf("failed to retrieve requesting user: %w", err)
+	}
+
+	if requestUser.DepartmentID == nil {
+		tx.Rollback()
+		return fmt.Errorf("requesting user (ID %d - %s) has no department assigned", requestUser.ID, requestUser.Name)
+	}
+
+	// Safely get user's role name, as Roles is a *Roles
+	var userRoleName string
+	if requestUser.Roles != nil {
+		userRoleName = requestUser.Roles.Name
+	} else {
+		userRoleName = "Unknown Role"
+		log.Printf("WARN: User %d (%s) has no role assigned or role not found for role_id: %d", requestUser.ID, requestUser.Name, requestUser.RoleID)
+	}
 
 	approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
 	if err != nil {
@@ -142,6 +174,40 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		if err := tx.Create(&expenseApprovals).Error; err != nil {
 			tx.Rollback()
 			return err
+		}
+
+		if i == 0 {
+			message := fmt.Sprintf(
+				"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
+				requestUser.Name,
+				userRoleName,
+				expenseRequest.ID,
+				expenseRequest.Amount,
+			)
+			notificationType := "new_request"
+
+			notification := &models.Notification{
+				UserID:    approverPolicyUser.UserID,
+				ExpenseID: expenseRequest.ID,
+				Message:   message,
+				Type:      notificationType,
+				IsRead:    false,
+			}
+			if err := r.notificationRepo.CreateNotification(notification); err != nil {
+				log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
+			}
+
+			go utilities.SendWebSocketMessage(
+				approverPolicyUser.UserID,
+				utilities.WebSocketMessagePayload{
+					ID:        notification.ID,
+					Message:   message,
+					Type:      notificationType,
+					ExpenseID: expenseRequest.ID,
+					IsRead:    false,
+					CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+				},
+			)
 		}
 	}
 	return tx.Commit().Error

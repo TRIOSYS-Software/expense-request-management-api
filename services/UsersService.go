@@ -59,10 +59,7 @@ func (u *UsersService) DeleteUser(id uint) error {
 	return u.UsersRepo.DeleteUser(id)
 }
 
-func (u *UsersService) LoginUser(user *models.Users) (*struct {
-	User  models.Users
-	Token string
-}, error) {
+func (u *UsersService) LoginUser(user *models.Users) (*dtos.LoginResponseDTO, error) {
 	getUser, err := u.UsersRepo.LoginUser(user)
 	if err != nil {
 		return nil, err
@@ -84,10 +81,7 @@ func (u *UsersService) LoginUser(user *models.Users) (*struct {
 		return nil, err
 	}
 
-	data := &struct {
-		User  models.Users
-		Token string
-	}{
+	data := &dtos.LoginResponseDTO{
 		User:  *getUser,
 		Token: tokenString,
 	}

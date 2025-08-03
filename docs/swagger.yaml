@@ -1,0 +1,1509 @@
+basePath: /api/v1
+definitions:
+  dtos.ChangePasswordRequestDTO:
+    properties:
+      new_password:
+        type: string
+      old_password:
+        type: string
+    type: object
+  dtos.ExpenseRequestSummary:
+    properties:
+      approved:
+        type: integer
+      daily_totals:
+        additionalProperties:
+          type: number
+        type: object
+      pending:
+        type: integer
+      rejected:
+        type: integer
+      total:
+        type: integer
+      total_amount:
+        type: number
+    type: object
+  dtos.LoginRequestDTO:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  dtos.LoginResponseDTO:
+    properties:
+      Token:
+        type: string
+      User:
+        $ref: '#/definitions/models.Users'
+    type: object
+  dtos.PasswordResetChangeRequestDTO:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  dtos.PasswordResetRequestDTO:
+    properties:
+      email:
+        type: string
+    type: object
+  dtos.PasswordResetTokenDTO:
+    properties:
+      email:
+        type: string
+      token:
+        type: string
+    type: object
+  dtos.UserProjectDTO:
+    properties:
+      projects:
+        items:
+          type: string
+        type: array
+      user_id:
+        type: integer
+    type: object
+  dtos.UserRequestDTO:
+    properties:
+      department:
+        type: integer
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+      role:
+        type: integer
+    type: object
+  models.ApprovalPoliciesUsers:
+    properties:
+      approval_policy_id:
+        type: integer
+      approver:
+        allOf:
+        - $ref: '#/definitions/models.Users'
+        description: ApprovalPolicy   ApprovalPolicies `gorm:"foreignKey:ApprovalPolicyID;references:ID"`
+      level:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+  models.Departments:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  models.ExpenseApprovals:
+    properties:
+      approval_date:
+        type: string
+      approver_id:
+        type: integer
+      comments:
+        type: string
+      id:
+        type: integer
+      is_final:
+        type: boolean
+      level:
+        type: integer
+      request_id:
+        type: integer
+      status:
+        type: string
+      users:
+        allOf:
+        - $ref: '#/definitions/models.Users'
+        description: ExpenseRequests ExpenseRequests `json:"expense_requests,omitempty"
+          gorm:"foreignKey:RequestID;references:ID"`
+    type: object
+  models.ExpenseRequests:
+    properties:
+      amount:
+        type: number
+      approvals:
+        items:
+          $ref: '#/definitions/models.ExpenseApprovals'
+        type: array
+      attachment:
+        type: string
+      created_at:
+        type: string
+      current_approver_level:
+        type: integer
+      date_submitted:
+        type: string
+      description:
+        type: string
+      gl_account:
+        type: string
+      gl_accounts:
+        $ref: '#/definitions/models.GLAcc'
+      id:
+        type: integer
+      is_send_to_sql_acc:
+        type: boolean
+      payment_method:
+        type: string
+      payment_methods:
+        $ref: '#/definitions/models.PaymentMethod'
+      project:
+        type: string
+      projects:
+        $ref: '#/definitions/models.Project'
+      status:
+        type: string
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.Users'
+      user_id:
+        type: integer
+    type: object
+  models.GLAcc:
+    properties:
+      acctype:
+        type: string
+      cashflow_type:
+        type: integer
+      code:
+        type: string
+      description:
+        type: string
+      description2:
+        type: string
+      dockey:
+        type: integer
+      parent:
+        type: integer
+      sic:
+        type: string
+      special_acctype:
+        type: string
+      tax:
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/models.Users'
+        type: array
+    type: object
+  models.PaymentMethod:
+    properties:
+      code:
+        type: string
+      currency_code:
+        type: string
+      description:
+        type: string
+      journal:
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/models.Users'
+        type: array
+    type: object
+  models.Project:
+    properties:
+      attachments:
+        items:
+          type: integer
+        type: array
+      code:
+        type: string
+      description:
+        type: string
+      description2:
+        type: string
+      is_active:
+        type: boolean
+      project_cost:
+        type: number
+      project_value:
+        type: number
+      users:
+        items:
+          $ref: '#/definitions/models.Users'
+        type: array
+    type: object
+  models.Roles:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  models.Users:
+    properties:
+      department:
+        type: integer
+      departments:
+        $ref: '#/definitions/models.Departments'
+      email:
+        type: string
+      gl_accounts:
+        items:
+          $ref: '#/definitions/models.GLAcc'
+        type: array
+      id:
+        type: integer
+      name:
+        type: string
+      password:
+        type: string
+      payment_methods:
+        items:
+          $ref: '#/definitions/models.PaymentMethod'
+        type: array
+      policy_users:
+        items:
+          $ref: '#/definitions/models.ApprovalPoliciesUsers'
+        type: array
+      projects:
+        items:
+          $ref: '#/definitions/models.Project'
+        type: array
+      role:
+        type: integer
+      roles:
+        $ref: '#/definitions/models.Roles'
+    type: object
+host: localhost:1234
+info:
+  contact: {}
+  description: This is a Expense Request System API Documentation.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Expense Request System API
+  version: "1.0"
+paths:
+  /departments:
+    get:
+      consumes:
+      - application/json
+      description: Get all departments
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Departments'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get all departments
+      tags:
+      - Departments
+    post:
+      consumes:
+      - application/json
+      description: Create a new department
+      parameters:
+      - description: Department
+        in: body
+        name: department
+        required: true
+        schema:
+          $ref: '#/definitions/models.Departments'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Departments'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Create a new department
+      tags:
+      - Departments
+  /departments/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a department
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Delete a department
+      tags:
+      - Departments
+    get:
+      consumes:
+      - application/json
+      description: Get a department by id
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Departments'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a department by id
+      tags:
+      - Departments
+    put:
+      consumes:
+      - application/json
+      description: Update a department
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Department
+        in: body
+        name: department
+        required: true
+        schema:
+          $ref: '#/definitions/models.Departments'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Departments'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Update a department
+      tags:
+      - Departments
+  /expense-approvals/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update a expense approval
+      parameters:
+      - description: ExpenseApproval ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: ExpenseApproval
+        in: body
+        name: ExpenseApproval
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExpenseApprovals'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseApprovals'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Update a expense approval
+      tags:
+      - ExpenseApprovals
+  /expense-requests:
+    post:
+      consumes:
+      - application/json
+      description: Create a new expense request
+      parameters:
+      - description: ExpenseRequest
+        in: body
+        name: ExpenseRequest
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExpenseRequests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Create a new expense request
+      tags:
+      - ExpenseRequests
+  /expense-requests/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an expense request
+      parameters:
+      - description: ExpenseRequest ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Delete an expense request
+      tags:
+      - ExpenseRequests
+    get:
+      consumes:
+      - application/json
+      description: Get a expense request by id
+      parameters:
+      - description: Expense request id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a expense request by id
+      tags:
+      - ExpenseRequests
+    put:
+      consumes:
+      - application/json
+      description: Update an expense request
+      parameters:
+      - description: ExpenseRequest ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: ExpenseRequest
+        in: body
+        name: ExpenseRequest
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExpenseRequests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Update an expense request
+      tags:
+      - ExpenseRequests
+  /expense-requests/{id}/sqlacc:
+    post:
+      consumes:
+      - application/json
+      description: Send an expense request to SQLACC
+      parameters:
+      - description: ExpenseRequest ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Send an expense request to SQLACC
+      tags:
+      - ExpenseRequests
+  /expense-requests/approvers/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get expense requests by approver ID
+      parameters:
+      - description: Approver ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ExpenseRequests'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get expense requests by approver ID
+      tags:
+      - ExpenseRequests
+  /expense-requests/attachment/{filename}:
+    get:
+      consumes:
+      - application/json
+      description: Serve expense request attachment
+      parameters:
+      - description: Attachment filename
+        in: path
+        name: filename
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Serve expense request attachment
+      tags:
+      - ExpenseRequests
+  /expense-requests/summary:
+    get:
+      consumes:
+      - application/json
+      description: Get a expense request summary
+      parameters:
+      - description: Start date
+        in: query
+        name: start_date
+        type: string
+      - description: End date
+        in: query
+        name: end_date
+        type: string
+      - description: Category id
+        in: query
+        name: category_id
+        type: integer
+      - description: User id
+        in: query
+        name: user_id
+        type: integer
+      - description: Approver id
+        in: query
+        name: approver_id
+        type: integer
+      - description: Status
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dtos.ExpenseRequestSummary'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a expense request summary
+      tags:
+      - ExpenseRequests
+  /expense-requests/user/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get a expense request by user id
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseRequests'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get a expense request by user id
+      tags:
+      - ExpenseRequests
+  /forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Forgot password
+      parameters:
+      - description: Password reset request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.PasswordResetRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Forgot password
+      tags:
+      - Users
+  /gl-acc:
+    get:
+      consumes:
+      - application/json
+      description: Get GLAcc data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.GLAcc'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Get GLAcc
+      tags:
+      - GLAcc
+  /gl-acc/sync:
+    post:
+      consumes:
+      - application/json
+      description: Sync GLAcc data from SQLAcc API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Sync GLAcc
+      tags:
+      - GLAcc
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Login user
+      parameters:
+      - description: User
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.LoginRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dtos.LoginResponseDTO'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Login user
+      tags:
+      - Users
+  /payment-methods:
+    get:
+      consumes:
+      - application/json
+      description: Fetches payment methods
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.PaymentMethod'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get payment methods
+      tags:
+      - Payment Method
+  /payment-methods/sync:
+    post:
+      consumes:
+      - application/json
+      description: Synchronizes payment methods from the SQLACC API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Sync payment methods
+      tags:
+      - Payment Method
+  /projects:
+    get:
+      consumes:
+      - application/json
+      description: Fetches projects
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Project'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Get projects
+      tags:
+      - Project
+  /projects/sync:
+    post:
+      consumes:
+      - application/json
+      description: Synchronizes projects
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - JWT Token: []
+      summary: Sync projects
+      tags:
+      - Project
+  /reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Reset password
+      parameters:
+      - description: Password reset change request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.PasswordResetChangeRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Reset password
+      tags:
+      - Users
+  /users:
+    get:
+      consumes:
+      - application/json
+      description: Get all users
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Users'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get all users
+      tags:
+      - Users
+    post:
+      consumes:
+      - application/json
+      description: Create user
+      parameters:
+      - description: User
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UserRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Users'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Create user
+      tags:
+      - Users
+  /users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Delete user
+      tags:
+      - Users
+    get:
+      consumes:
+      - application/json
+      description: Get user by id
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Users'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get user by id
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: Update user
+      parameters:
+      - description: User
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UserRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Users'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Update user
+      tags:
+      - Users
+  /users/{id}/change-password:
+    put:
+      consumes:
+      - application/json
+      description: Change password
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Change password request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.ChangePasswordRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Change password
+      tags:
+      - Users
+  /users/{id}/gl-accounts:
+    get:
+      consumes:
+      - application/json
+      description: Get GLAccounts by user id
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.GLAcc'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get GLAccounts by user id
+      tags:
+      - Users
+  /users/{id}/payment-methods:
+    get:
+      consumes:
+      - application/json
+      description: Get payment methods by user id
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.PaymentMethod'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get payment methods by user id
+      tags:
+      - Users
+  /users/{id}/projects:
+    get:
+      consumes:
+      - application/json
+      description: Get projects by user id
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Project'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get projects by user id
+      tags:
+      - Users
+  /users/gl-accounts:
+    get:
+      consumes:
+      - application/json
+      description: Get users with GLAccounts
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Users'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get users with GLAccounts
+      tags:
+      - Users
+  /users/payment-methods:
+    get:
+      consumes:
+      - application/json
+      description: Get users with payment methods
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Users'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get users with payment methods
+      tags:
+      - Users
+  /users/projects:
+    get:
+      consumes:
+      - application/json
+      description: Get users with projects
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Users'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Get users with projects
+      tags:
+      - Users
+  /users/set-gl-accounts:
+    post:
+      consumes:
+      - application/json
+      description: Set GLAccounts to user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Set GLAccounts to user
+      tags:
+      - Users
+  /users/set-payment-methods:
+    post:
+      consumes:
+      - application/json
+      description: Set payment methods to user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Set payment methods to user
+      tags:
+      - Users
+  /users/set-projects:
+    post:
+      consumes:
+      - application/json
+      description: Set projects to user
+      parameters:
+      - description: User project
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UserProjectDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Set projects to user
+      tags:
+      - Users
+  /validate-password-reset-token:
+    post:
+      consumes:
+      - application/json
+      description: Validate password reset token
+      parameters:
+      - description: Password reset token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.PasswordResetTokenDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Validate password reset token
+      tags:
+      - Users
+  /verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Users'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - JWT Token: []
+      summary: Verify user
+      tags:
+      - Users
+securityDefinitions:
+  JWT Token:
+    description: Type JWT token without Bearer prefix.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

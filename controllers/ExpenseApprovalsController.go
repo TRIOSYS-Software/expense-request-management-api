@@ -33,6 +33,19 @@ func (con *ExpenseApprovalsController) GetExpenseApprovalsByApproverID(c echo.Co
 	return c.JSON(200, &ExpenseApprovals)
 }
 
+// UpdateExpenseApproval update a expense approval
+// @Summary Update a expense approval
+// @Description Update a expense approval
+// @Tags ExpenseApprovals
+// @Accept json
+// @Produce json
+// @Param id path int true "ExpenseApproval ID"
+// @Param ExpenseApproval body models.ExpenseApprovals true "ExpenseApproval"
+// @Success 200 {object} models.ExpenseApprovals
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /expense-approvals/{id} [put]
+// @Security JWT Token
 func (con *ExpenseApprovalsController) UpdateExpenseApproval(c echo.Context) error {
 	id := c.Param("id")
 	idInt, err := strconv.Atoi(id)

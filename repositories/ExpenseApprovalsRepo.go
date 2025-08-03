@@ -1,17 +1,24 @@
 package repositories
 
 import (
+	"fmt"
 	"shwetaik-expense-management-api/models"
+	"shwetaik-expense-management-api/utilities"
+	"time"
 
 	"gorm.io/gorm"
 )
 
 type ExpenseApprovalsRepo struct {
-	db *gorm.DB
+	db               *gorm.DB
+	notificationRepo *NotificationRepo
 }
 
 func NewExpenseApprovalsRepo(db *gorm.DB) *ExpenseApprovalsRepo {
-	return &ExpenseApprovalsRepo{db: db}
+	return &ExpenseApprovalsRepo{
+		db:               db,
+		notificationRepo: NewNotificationRepo(db),
+	}
 }
 
 func (r *ExpenseApprovalsRepo) GetExpenseApprovals() []models.ExpenseApprovals {
@@ -32,37 +39,28 @@ func (r *ExpenseApprovalsRepo) GetExpenseApprovalsByApproverID(approverID uint) 
 
 func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *models.ExpenseApprovals) error {
 	tx := r.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
 	var expenseApprovalToUpdate models.ExpenseApprovals
-	if err := tx.Where("id = ?", id).First(&expenseApprovalToUpdate).Error; err != nil {
+	if err := tx.Preload("Users").Where("id = ?", id).First(&expenseApprovalToUpdate).Error; err != nil {
+		tx.Rollback()
 		return err
 	}
 
 	var expenseRequest models.ExpenseRequests
-	tx.Preload("Approvals").Where("id = ?", expenseApprovalToUpdate.RequestID).First(&expenseRequest)
-	if expenseApproval.Status == "rejected" {
-		expenseRequest.Status = "rejected"
-		if err := tx.Save(&expenseRequest).Error; err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
+	tx.Preload("Approvals").Preload("User").Preload("GLAccounts").Where("id = ?", expenseApprovalToUpdate.RequestID).First(&expenseRequest)
 
-	if expenseApproval.Status == "approved" {
-		expenseRequest.CurrentApproverLevel += 1
-		// Get the maximum approver level from all approvals
-		var maxLevel uint
-		tx.Model(&models.ExpenseApprovals{}).Where("request_id = ?", expenseRequest.ID).Select("MAX(level)").Scan(&maxLevel)
+	originalRequestCreatorID := expenseRequest.UserID
+	originalRequestCreatorName := expenseRequest.User.Name
+	expenseDescription := expenseRequest.Description
 
-		// If we've reached or exceeded the maximum level, mark as approved
-		if expenseRequest.CurrentApproverLevel > maxLevel {
-			expenseRequest.Status = "approved"
-		}
-
-		if err := tx.Save(&expenseRequest).Error; err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
+	var notificationMessage string
+	var notificationType string
+	var targetUserID uint
 
 	expenseApprovalToUpdate.Status = expenseApproval.Status
 	expenseApprovalToUpdate.Comments = expenseApproval.Comments
@@ -71,6 +69,86 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 	if err := tx.Save(&expenseApprovalToUpdate).Error; err != nil {
 		tx.Rollback()
 		return err
+	}
+
+	if expenseApproval.Status == "rejected" {
+		expenseRequest.Status = "rejected"
+		expenseRequest.CurrentApproverLevel = expenseApprovalToUpdate.Level
+
+		notificationMessage = fmt.Sprintf(
+			"Your expense request (#%d - '%s')has been REJECTED by %s (Level %d). Reason: %s",
+			expenseRequest.ID,
+			expenseDescription,
+			expenseApprovalToUpdate.Users.Name,
+			expenseApprovalToUpdate.Level,
+			*expenseApproval.Comments,
+		)
+		notificationType = "rejected"
+		targetUserID = originalRequestCreatorID
+
+	} else if expenseApproval.Status == "approved" {
+		expenseRequest.CurrentApproverLevel = expenseApprovalToUpdate.Level + 1
+
+		var nextApproverApproval models.ExpenseApprovals
+		err := tx.Where("request_id = ? AND level = ?", expenseRequest.ID, expenseRequest.CurrentApproverLevel).
+			Preload("Users").
+			First(&nextApproverApproval).Error
+
+		if err == nil {
+			notificationMessage = fmt.Sprintf(
+				"You have a new expense request (#%d - '%s') from %s to approve. (Current Level: %d)",
+				expenseRequest.ID,
+				expenseDescription,
+				originalRequestCreatorName,
+				expenseRequest.CurrentApproverLevel,
+			)
+			notificationType = "pending_approval"
+			targetUserID = nextApproverApproval.ApproverID
+		} else if err == gorm.ErrRecordNotFound {
+			expenseRequest.Status = "approved"
+
+			notificationMessage = fmt.Sprintf(
+				"Your expense request (#%d - '%s') has been fully APPROVED!",
+				expenseRequest.ID, expenseDescription,
+			)
+			notificationType = "approved_final"
+			targetUserID = originalRequestCreatorID
+		} else {
+			tx.Rollback()
+			return fmt.Errorf("error finding next approver: %w", err)
+		}
+	} else {
+		return tx.Commit().Error
+	}
+
+	if err := tx.Save(&expenseRequest).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if targetUserID != 0 && notificationMessage != "" && notificationType != "" {
+		notification := &models.Notification{
+			UserID:    targetUserID,
+			ExpenseID: expenseRequest.ID,
+			Message:   notificationMessage,
+			Type:      notificationType,
+			IsRead:    false,
+		}
+		if err := r.notificationRepo.CreateNotification(notification); err != nil {
+			fmt.Printf("Error saving notification to DB for user %d: %v\n", targetUserID, err)
+		}
+
+		go utilities.SendWebSocketMessage(
+			targetUserID,
+			utilities.WebSocketMessagePayload{
+				ID:        notification.ID,
+				Message:   notificationMessage,
+				Type:      notificationType,
+				ExpenseID: expenseRequest.ID,
+				IsRead:    false,
+				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+			},
+		)
 	}
 
 	return tx.Commit().Error

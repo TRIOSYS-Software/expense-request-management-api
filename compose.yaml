@@ -1,6 +1,7 @@
 services:
   db:
     image: mysql:8.0-debian
+    platform: linux/x86_64
     restart: always
     environment:
       MYSQL_DATABASE: ${DB_NAME}
@@ -11,6 +12,11 @@ services:
       - "3306:3306"
     volumes:
       - mysql:/var/lib/mysql
+    networks:
+      - expense-request
 
 volumes:
   mysql:
+networks:
+  expense-request:
+    driver: bridge

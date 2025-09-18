@@ -19,4 +19,5 @@ type Users struct {
 	PaymentMethods []PaymentMethod         `json:"payment_methods,omitempty" gorm:"many2many:users_payment_methods;"`
 	GLAccounts     []GLAcc                 `json:"gl_accounts,omitempty" gorm:"many2many:users_gl_accounts;"`
 	Projects       []Project               `json:"projects,omitempty" gorm:"many2many:users_projects;"`
+	DeviceTokens   []DeviceToken           `json:"-" gorm:"foreignKey:UserID;references:ID"`
 }

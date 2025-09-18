@@ -7,11 +7,12 @@ import (
 	"shwetaik-expense-management-api/repositories"
 	"shwetaik-expense-management-api/services"
 
+	firebase "firebase.google.com/go/v4"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
 
-func InitialRoute(e *echo.Echo, db *gorm.DB) {
+func InitialRoute(e *echo.Echo, db *gorm.DB, firebaseApp *firebase.App) {
 	apiV1 := e.Group("/api/v1")
 
 	initUsersRoutes(apiV1, db)
@@ -19,13 +20,14 @@ func InitialRoute(e *echo.Echo, db *gorm.DB) {
 	initRolesRoutes(apiV1, db)
 	initApprovalPoliciesRoutes(apiV1, db)
 	initExpenseCategoriesRoutes(apiV1, db)
-	initExpenseRequestsRoutes(apiV1, db)
-	initExpenseApprovalsRoutes(apiV1, db)
-	initNotificationRoutes(apiV1, db)
+	initExpenseRequestsRoutes(apiV1, db, firebaseApp)
+	initExpenseApprovalsRoutes(apiV1, db, firebaseApp)
+	initNotificationRoutes(apiV1, db, firebaseApp)
 	initPaymentMethodsRoutes(apiV1, db)
 	initProjectsRoutes(apiV1, db)
 	initGLAccRoutes(apiV1, db)
 
+	initDeviceTokenRoutes(apiV1, db)
 	initWebsocketRoutes(e)
 }
 
@@ -100,8 +102,8 @@ func initExpenseCategoriesRoutes(e *echo.Group, db *gorm.DB) {
 	e.DELETE("/expense-categories/:id", expenseCategoriesController.DeleteExpenseCategory, middlewares.IsAuthenticated, middlewares.IsAdmin)
 }
 
-func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB) {
-	expenseRequestsRepo := repositories.NewExpenseRequestsRepo(db)
+func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {
+	expenseRequestsRepo := repositories.NewExpenseRequestsRepo(db, firebaseApp)
 	expenseRequestsService := services.NewExpenseRequestsService(expenseRequestsRepo)
 	expenseRequestsController := controllers.NewExpenseRequestsController(expenseRequestsService)
 	e.GET("/expense-requests", expenseRequestsController.GetExpenseRequests, middlewares.IsAuthenticated)
@@ -116,8 +118,8 @@ func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/expense-requests/attachment/:filename", expenseRequestsController.ServeExpenseRequestAttachment)
 }
 
-func initExpenseApprovalsRoutes(e *echo.Group, db *gorm.DB) {
-	expenseApprovalsRepo := repositories.NewExpenseApprovalsRepo(db)
+func initExpenseApprovalsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {
+	expenseApprovalsRepo := repositories.NewExpenseApprovalsRepo(db, firebaseApp)
 	expenseApprovalsService := services.NewExpenseApprovalsService(expenseApprovalsRepo)
 	expenseApprovalsController := controllers.NewExpenseApprovalsController(expenseApprovalsService)
 	e.GET("/expense-approvals", expenseApprovalsController.GetExpenseApprovals, middlewares.IsAuthenticated)
@@ -125,8 +127,8 @@ func initExpenseApprovalsRoutes(e *echo.Group, db *gorm.DB) {
 	e.PUT("/expense-approvals/:id", expenseApprovalsController.UpdateExpenseApproval, middlewares.IsAuthenticated)
 }
 
-func initNotificationRoutes(e *echo.Group, db *gorm.DB) {
-	notificationRepo := repositories.NewNotificationRepo(db)
+func initNotificationRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {
+	notificationRepo := repositories.NewNotificationRepo(db, firebaseApp)
 	notificationService := services.NewNotificationService(notificationRepo)
 	notificationController := controllers.NewNotificationController(notificationService)
 
@@ -190,4 +192,14 @@ func initGLAccRoutes(e *echo.Group, db *gorm.DB) {
 
 func initWebsocketRoutes(e *echo.Echo) {
 	e.GET("/ws/:userID", controllers.HandleWebSocket)
+}
+
+func initDeviceTokenRoutes(e *echo.Group, db *gorm.DB) {
+	deviceTokenRepo := repositories.NewDeviceTokenRepo(db)
+	deviceTokenService := services.NewDeviceTokenService(deviceTokenRepo)
+	deviceTokenController := controllers.NewDeviceTokenController(deviceTokenService)
+	
+
+	e.GET("/users/:id/device-tokens", deviceTokenController.GetTokensByUserID, middlewares.IsAuthenticated)
+	e.POST("/users/:id/device-tokens", deviceTokenController.CreateTokenByUserID)
 }

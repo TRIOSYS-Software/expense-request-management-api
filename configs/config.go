@@ -1,10 +1,17 @@
 package configs
 
+
 import (
+	"context"
+	"log"
 	"os"
+
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/models"
 
+	firebase "firebase.google.com/go/v4"
+	"google.golang.org/api/option"
+	
 	"github.com/joho/godotenv"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -30,6 +37,7 @@ type Config struct {
 	SMTP_HOST           string
 	SMTP_PORT           string
 	Environment         string
+	FirebaseApp         *firebase.App
 }
 
 func getEnvOrDefault(env string, defaultValue string) string {
@@ -81,6 +89,21 @@ func (c *Config) ConnectDB() error {
 	return nil
 }
 
+func (c *Config) SetupFirebase() error {
+	opt := option.WithCredentialsFile("fcm_credentials.json")
+	app, err := firebase.NewApp(context.Background(), nil, opt)
+
+	if err != nil {
+		log.Printf("error initializing Firebase app: %v\n", err)
+		return err
+	}
+	log.Printf("Firebase app initialized: %+v\n", app)
+	log.Printf("Option data: %+v\n", opt)
+	c.FirebaseApp = app
+	return nil
+}
+
+
 func (c *Config) InitializedDB() {
 	c.DB.AutoMigrate(
 		&models.Users{},
@@ -97,6 +120,7 @@ func (c *Config) InitializedDB() {
 		&models.GLAcc{},
 		&models.PasswordReset{},
 		&models.Notification{},
+		&models.DeviceToken{},
 	)
 
 	var role models.Roles

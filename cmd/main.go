@@ -43,7 +43,9 @@ func main() {
 		e.Logger.Fatal(err)
 	}
 
-	cfg.SetupFirebase() 
+	if err := cfg.SetupFirebase(); err != nil {
+		e.Logger.Fatal(err)
+	}
 	cfg.InitializedDB()
 
 	if cfg.Environment == "dev" {

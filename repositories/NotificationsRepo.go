@@ -12,48 +12,48 @@ import (
 )
 
 type NotificationRepo struct {
-	db *gorm.DB
-	firebaseApp     *firebase.App     
+	db          *gorm.DB
+	firebaseApp *firebase.App
 }
 
 func (r *NotificationRepo) SendPushNotification(tokens []string, title string, body string, data map[string]string) {
-    ctx := context.Background()
-    client, err := r.firebaseApp.Messaging(ctx)
-    if err != nil {
-        log.Printf("Error: Unable to get Firebase Messaging client: %v", err)
-        return
-    }
+	ctx := context.Background()
+	client, err := r.firebaseApp.Messaging(ctx)
+	if err != nil {
+		log.Printf("Error: Unable to get Firebase Messaging client: %v", err)
+		return
+	}
 
-    message := &messaging.MulticastMessage{
-        Notification: &messaging.Notification{
-            Title: title,
-            Body:  body,
-        },
-        Data:   data, 
-        Tokens: tokens,
-    }
+	message := &messaging.MulticastMessage{
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  body,
+		},
+		Data:   data,
+		Tokens: tokens,
+	}
 
-    br, err := client.SendEachForMulticast(ctx, message)
-    if err != nil {
-        log.Printf("Error: Failed to send FCM message: %v", err)
-        return
-    }
-    log.Printf("FCM push notification sent: %d successful, %d failed.", br.SuccessCount, br.FailureCount)
+	br, err := client.SendEachForMulticast(ctx, message)
+	if err != nil {
+		log.Printf("Error: Failed to send FCM message: %v", err)
+		return
+	}
+	log.Printf("FCM push notification sent: %d successful, %d failed.", br.SuccessCount, br.FailureCount)
 
-    if br.FailureCount > 0 {
-        for idx, resp := range br.Responses {
-            if !resp.Success {
-                log.Printf(" -> Failed token: %s (Error: %v)", tokens[idx], resp.Error)
-            }
-        }
-    }
+	if br.FailureCount > 0 {
+		for idx, resp := range br.Responses {
+			if !resp.Success {
+				log.Printf(" -> Failed token: %s (Error: %v)", tokens[idx], resp.Error)
+			}
+		}
+	}
 }
 
 func NewNotificationRepo(db *gorm.DB,
-	app *firebase.App,) *NotificationRepo {
+	app *firebase.App) *NotificationRepo {
 	return &NotificationRepo{
-		db: db,
-		firebaseApp:     app,}
+		db:          db,
+		firebaseApp: app}
 }
 
 func (r *NotificationRepo) CreateNotification(notification *models.Notification) error {

@@ -1,17 +1,17 @@
 package configs
 
-
 import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/models"
 
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
-	
+
 	"github.com/joho/godotenv"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -90,7 +90,15 @@ func (c *Config) ConnectDB() error {
 }
 
 func (c *Config) SetupFirebase() error {
-	opt := option.WithCredentialsFile("fcm_credentials.json")
+	credPath := os.Getenv("FIREBASE_CREDENTIALS_PATH")
+	if credPath == "" {
+		credPath = filepath.Join(".", "fcm_credentials.json")
+	}
+	if _, err := os.Stat(credPath); os.IsNotExist(err) {
+		log.Printf("Firebase credentials file does not exist at path: %s\n", credPath)
+		return err
+	}
+	opt := option.WithCredentialsFile(credPath)
 	app, err := firebase.NewApp(context.Background(), nil, opt)
 
 	if err != nil {
@@ -102,7 +110,6 @@ func (c *Config) SetupFirebase() error {
 	c.FirebaseApp = app
 	return nil
 }
-
 
 func (c *Config) InitializedDB() {
 	c.DB.AutoMigrate(

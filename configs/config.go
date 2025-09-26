@@ -37,6 +37,7 @@ type Config struct {
 	SMTP_HOST           string
 	SMTP_PORT           string
 	Environment         string
+	FirebaseCredPath    string
 	FirebaseApp         *firebase.App
 }
 
@@ -74,6 +75,7 @@ func loadEnv(env string) *Config {
 	cfg.SMTP_HOST = getEnvOrDefault("SMTP_HOST", "")
 	cfg.SMTP_PORT = getEnvOrDefault("SMTP_PORT", "587")
 	cfg.Environment = getEnvOrDefault("ENVIRONMENT", "dev")
+	cfg.FirebaseCredPath = getEnvOrDefault("FIREBASE_CREDENTIALS_PATH", "fcm_credentials.json")
 
 	return cfg
 }

@@ -198,7 +198,6 @@ func initDeviceTokenRoutes(e *echo.Group, db *gorm.DB) {
 	deviceTokenRepo := repositories.NewDeviceTokenRepo(db)
 	deviceTokenService := services.NewDeviceTokenService(deviceTokenRepo)
 	deviceTokenController := controllers.NewDeviceTokenController(deviceTokenService)
-	
 
 	e.GET("/users/:id/device-tokens", deviceTokenController.GetTokensByUserID, middlewares.IsAuthenticated)
 	e.POST("/users/:id/device-tokens", deviceTokenController.CreateTokenByUserID)

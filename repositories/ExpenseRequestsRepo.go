@@ -18,14 +18,14 @@ import (
 type ExpenseRequestsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
-	deviceTokenRepo *DeviceTokenRepo
+	deviceTokenRepo  *DeviceTokenRepo
 }
 
 func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequestsRepo {
 	return &ExpenseRequestsRepo{
 		db:               db,
 		notificationRepo: NewNotificationRepo(db, firebaseApp),
-		deviceTokenRepo: NewDeviceTokenRepo(db),
+		deviceTokenRepo:  NewDeviceTokenRepo(db),
 	}
 }
 
@@ -211,7 +211,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			if err := r.notificationRepo.CreateNotification(notification); err != nil {
 				log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
 			}
-			
+
 			go utilities.SendWebSocketMessage(
 				approverPolicyUser.UserID,
 				utilities.WebSocketMessagePayload{

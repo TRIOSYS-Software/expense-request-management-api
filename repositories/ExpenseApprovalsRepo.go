@@ -15,14 +15,14 @@ import (
 type ExpenseApprovalsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
-	deviceTokenRepo *DeviceTokenRepo
+	deviceTokenRepo  *DeviceTokenRepo
 }
 
 func NewExpenseApprovalsRepo(db *gorm.DB, firebaeApp *firebase.App) *ExpenseApprovalsRepo {
 	return &ExpenseApprovalsRepo{
 		db:               db,
 		notificationRepo: NewNotificationRepo(db, firebaeApp),
-		deviceTokenRepo: NewDeviceTokenRepo(db),
+		deviceTokenRepo:  NewDeviceTokenRepo(db),
 	}
 }
 
@@ -140,15 +140,15 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 			IsRead:    false,
 		}
 		tokens, err := r.deviceTokenRepo.GetTokensByUserID(targetUserID)
-			if err != nil {
-				log.Printf("Error fetching device tokens for user %d: %v", targetUserID, err)
-			} else if len(tokens) > 0 {
-				data := map[string]string{
-					"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
-					"type":      notificationType,
-				}
-				r.notificationRepo.SendPushNotification(tokens, "New Expense Request", notificationMessage, data)
+		if err != nil {
+			log.Printf("Error fetching device tokens for user %d: %v", targetUserID, err)
+		} else if len(tokens) > 0 {
+			data := map[string]string{
+				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
+				"type":      notificationType,
 			}
+			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", notificationMessage, data)
+		}
 
 		if err := r.notificationRepo.CreateNotification(notification); err != nil {
 			fmt.Printf("Error saving notification to DB for user %d: %v\n", targetUserID, err)

@@ -1,4 +1,17 @@
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: mysql:8.0-debian
     platform: linux/x86_64
@@ -12,11 +25,12 @@ services:
       - "3306:3306"
     volumes:
       - mysql:/var/lib/mysql
-    networks:
-      - expense-request
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   mysql:
-networks:
-  expense-request:
-    driver: bridge

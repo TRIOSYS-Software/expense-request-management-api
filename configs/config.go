@@ -1,9 +1,16 @@
 package configs
 
 import (
+	"context"
+	"log"
 	"os"
+	"path/filepath"
+
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/models"
+
+	firebase "firebase.google.com/go/v4"
+	"google.golang.org/api/option"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/mysql"
@@ -30,6 +37,8 @@ type Config struct {
 	SMTP_HOST           string
 	SMTP_PORT           string
 	Environment         string
+	FirebaseCredPath    string
+	FirebaseApp         *firebase.App
 }
 
 func getEnvOrDefault(env string, defaultValue string) string {
@@ -66,6 +75,7 @@ func loadEnv(env string) *Config {
 	cfg.SMTP_HOST = getEnvOrDefault("SMTP_HOST", "")
 	cfg.SMTP_PORT = getEnvOrDefault("SMTP_PORT", "587")
 	cfg.Environment = getEnvOrDefault("ENVIRONMENT", "dev")
+	cfg.FirebaseCredPath = getEnvOrDefault("FIREBASE_CREDENTIALS_PATH", "fcm_credentials.json")
 
 	return cfg
 }
@@ -78,6 +88,28 @@ func (c *Config) ConnectDB() error {
 	}
 
 	c.DB = db
+	return nil
+}
+
+func (c *Config) SetupFirebase() error {
+	credPath := os.Getenv("FIREBASE_CREDENTIALS_PATH")
+	if credPath == "" {
+		credPath = filepath.Join(".", "fcm_credentials.json")
+	}
+	if _, err := os.Stat(credPath); os.IsNotExist(err) {
+		log.Printf("Firebase credentials file does not exist at path: %s\n", credPath)
+		return err
+	}
+	opt := option.WithCredentialsFile(credPath)
+	app, err := firebase.NewApp(context.Background(), nil, opt)
+
+	if err != nil {
+		log.Printf("error initializing Firebase app: %v\n", err)
+		return err
+	}
+	log.Printf("Firebase app initialized: %+v\n", app)
+	log.Printf("Option data: %+v\n", opt)
+	c.FirebaseApp = app
 	return nil
 }
 
@@ -97,6 +129,7 @@ func (c *Config) InitializedDB() {
 		&models.GLAcc{},
 		&models.PasswordReset{},
 		&models.Notification{},
+		&models.DeviceToken{},
 	)
 
 	var role models.Roles

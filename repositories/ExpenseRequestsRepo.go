@@ -10,18 +10,22 @@ import (
 	"shwetaik-expense-management-api/utilities"
 	"time"
 
+	firebase "firebase.google.com/go/v4"
+
 	"gorm.io/gorm"
 )
 
 type ExpenseRequestsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
+	deviceTokenRepo  *DeviceTokenRepo
 }
 
-func NewExpenseRequestsRepo(db *gorm.DB) *ExpenseRequestsRepo {
+func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequestsRepo {
 	return &ExpenseRequestsRepo{
 		db:               db,
-		notificationRepo: NewNotificationRepo(db),
+		notificationRepo: NewNotificationRepo(db, firebaseApp),
+		deviceTokenRepo:  NewDeviceTokenRepo(db),
 	}
 }
 
@@ -193,6 +197,17 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 				Type:      notificationType,
 				IsRead:    false,
 			}
+			tokens, err := r.deviceTokenRepo.GetTokensByUserID(approverPolicyUser.UserID)
+			if err != nil {
+				log.Printf("Error fetching device tokens for user %d: %v", approverPolicyUser.UserID, err)
+			} else if len(tokens) > 0 {
+				data := map[string]string{
+					"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
+					"type":      notificationType,
+				}
+				r.notificationRepo.SendPushNotification(tokens, "New Expense Request", message, data)
+			}
+
 			if err := r.notificationRepo.CreateNotification(notification); err != nil {
 				log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
 			}

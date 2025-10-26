@@ -43,12 +43,15 @@ func main() {
 		e.Logger.Fatal(err)
 	}
 
+	if err := cfg.SetupFirebase(); err != nil {
+		e.Logger.Fatal(err)
+	}
 	cfg.InitializedDB()
 
 	if cfg.Environment == "dev" {
 		e.GET("/swagger/*", echoSwagger.WrapHandler)
 	}
-	routes.InitialRoute(e, cfg.DB)
+	routes.InitialRoute(e, cfg.DB, cfg.FirebaseApp)
 
 	e.Logger.Fatal(e.Start(cfg.ServerIP + ":" + cfg.ServerPort))
 }

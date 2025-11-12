@@ -1,12 +1,14 @@
 package middlewares
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"shwetaik-expense-management-api/configs"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 func validateToken(token string) (*jwt.Token, error) {
@@ -46,5 +48,41 @@ func IsAdmin(next echo.HandlerFunc) echo.HandlerFunc {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		return next(c)
+	}
+}
+
+func RequirePermission(db *gorm.DB, entity string, action string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			userRoleIDFloat := c.Get("user_role")
+
+			if userRoleIDFloat == nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+			}
+
+			userRoleID, ok := userRoleIDFloat.(uint)
+			if !ok {
+				userRoleID = uint(c.Get("user_role").(float64))
+			}
+
+			var count int64
+			err := db.
+				Table("roles_permissions").
+				Joins("JOIN permissions ON roles_permissions.permissions_id = permissions.id").
+				Where("roles_permissions.roles_id = ? AND permissions.entity = ? AND permissions.action = ?", userRoleID, entity, action).
+				Count(&count).Error
+
+			fmt.Println(err)
+
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Permission check failed"})
+			}
+
+			if count == 0 {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": "Forbidden: Insufficient Permissions"})
+			}
+
+			return next(c)
+		}
 	}
 }

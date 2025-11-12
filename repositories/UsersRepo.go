@@ -25,7 +25,7 @@ func (u *UsersRepo) GetUsers() ([]models.Users, error) {
 
 func (u *UsersRepo) GetUserByID(id uint) (*models.Users, error) {
 	var user models.Users
-	err := u.db.Model(&models.Users{}).First(&user, id).Error
+	err := u.db.Preload("Roles").Preload("Roles.Permissions").First(&user, "id = ?", id).Error
 	return &user, err
 }
 
@@ -58,7 +58,7 @@ func (u *UsersRepo) DeleteUser(id uint) error {
 
 func (u *UsersRepo) LoginUser(user *models.Users) (*models.Users, error) {
 	var users models.Users
-	err := u.db.Preload("Roles").Preload("Departments").First(&users, "email = ?", user.Email).Error
+	err := u.db.Preload("Roles").Preload("Roles.Permissions").Preload("Departments").First(&users, "email = ?", user.Email).Error
 	return &users, err
 }
 

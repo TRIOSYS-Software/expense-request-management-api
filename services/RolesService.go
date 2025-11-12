@@ -7,28 +7,42 @@ import (
 
 type RolesService struct {
 	RolesRepo *repositories.RolesRepo
+	PermissionsRepo *repositories.PermissionsRepo
 }
 
-func NewRolesService(RoleRepo *repositories.RolesRepo) *RolesService {
-	return &RolesService{RolesRepo: RoleRepo}
+func NewRolesService(RoleRepo *repositories.RolesRepo, permRepo *repositories.PermissionsRepo) *RolesService {
+	return &RolesService{
+		RolesRepo: RoleRepo,
+		PermissionsRepo: permRepo,
+	}
 }
 
-func (r *RolesService) GetAll() []models.Roles {
-	return r.RolesRepo.GetRoles()
+func (s *RolesService) GetAll() ([]models.Roles, error) {
+	return s.RolesRepo.GetRoles()
 }
 
-func (r *RolesService) CreateRole(role *models.Roles) error {
-	return r.RolesRepo.CreateRole(role)
+func (s *RolesService) GetRoleByID(id uint) (*models.Roles, error) {
+	return s.RolesRepo.GetRoleByID(id)
 }
 
-func (r *RolesService) GetRoleByID(id uint) (*models.Roles, error) {
-	return r.RolesRepo.GetRoleByID(id)
+func (s *RolesService) CreateRoleWithPermissions(role *models.Roles, permissionIDs []uint) error {
+	if len(permissionIDs) > 0 {
+		if _, err := s.PermissionsRepo.GetByIDs(permissionIDs); err != nil {
+			return err
+		}
+	}
+	return s.RolesRepo.CreateRoleWithPermissions(role, permissionIDs)
 }
 
-func (r *RolesService) UpdateRole(role *models.Roles) error {
-	return r.RolesRepo.UpdateRole(role)
+func (s *RolesService) UpdateRoleWithPermissions(role *models.Roles, permissionIDs []uint) error {
+	if len(permissionIDs) > 0 {
+		if _, err := s.PermissionsRepo.GetByIDs(permissionIDs); err != nil {
+			return err
+		}
+	}
+	return s.RolesRepo.UpdateRoleWithPermissions(role, permissionIDs)
 }
 
-func (r *RolesService) DeleteRole(id uint) error {
-	return r.RolesRepo.DeleteRole(id)
+func (s *RolesService) DeleteRole(id uint) error {
+	return s.RolesRepo.DeleteRoleIfUnused(id)
 }

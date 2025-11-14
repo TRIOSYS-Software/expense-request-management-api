@@ -20,3 +20,6 @@ func (s *DeviceTokenService) GetTokensByUserID(userID uint) ([]string, error) {
 func (s *DeviceTokenService) CreateTokenByUserID(userID uint, token string, deviceOS string) (*models.DeviceToken, error) {
 	return s.repo.CreateTokenByUserID(userID, token, deviceOS)
 }
+func (s *DeviceTokenService) DeleteToken(token string) error {
+	return s.repo.DeleteToken(token)
+}

@@ -217,4 +217,5 @@ func initDeviceTokenRoutes(e *echo.Group, db *gorm.DB) {
 
 	e.GET("/users/:id/device-tokens", deviceTokenController.GetTokensByUserID, middlewares.IsAuthenticated)
 	e.POST("/users/:id/device-tokens", deviceTokenController.CreateTokenByUserID)
+	e.DELETE("/device-tokens/:token", deviceTokenController.DeleteToken)
 }

@@ -33,3 +33,6 @@ func (r *DeviceTokenRepo) CreateTokenByUserID(userID uint, token string, deviceO
 
 	return deviceToken, nil
 }
+func (r *DeviceTokenRepo) DeleteToken(token string) error {
+	return r.db.Where("token = ?", token).Delete(&models.DeviceToken{}).Error
+}

@@ -59,3 +59,16 @@ func (c *DeviceTokenController) CreateTokenByUserID(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusCreated, deviceToken)
 }
+
+func (c *DeviceTokenController) DeleteToken(ctx echo.Context) error {
+	token := ctx.Param("token")
+	if token == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Missing token"})
+	}
+
+	if err := c.service.DeleteToken(token); err != nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return ctx.NoContent(http.StatusNoContent)
+}

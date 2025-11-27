@@ -27,6 +27,10 @@ func (u *UsersService) GetUsers() ([]models.Users, error) {
 	return u.UsersRepo.GetUsers()
 }
 
+func (u *UsersService) GetAllUsers() ([]models.Users, error) {
+	return u.UsersRepo.GetAllUsers()
+}
+
 func (u *UsersService) CreateUser(user *models.Users) error {
 	hashPassword, err := helper.HashPassword(user.Password)
 	if err != nil {

@@ -40,8 +40,9 @@ func initUsersRoutes(e *echo.Group, db *gorm.DB) {
 	e.POST("/login", usersController.LoginUser)
 	e.POST("/verify", usersController.VerifyUser, middlewares.IsAuthenticated)
 	e.GET("/users/role/:role_id", usersController.GetUsersByRole, middlewares.IsAuthenticated)
-	
+
 	e.GET("/users", usersController.GetUsers, middlewares.IsAuthenticated)
+	e.GET("/users-all", usersController.GetAllUsers, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "user", "view"))
 	e.GET("/users/:id", usersController.GetUserByID, middlewares.IsAuthenticated)
 	e.POST("/users", usersController.CreateUser, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "user", "create"))
 	e.PUT("/users/:id", usersController.UpdateUser, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "user", "update"))
@@ -63,7 +64,7 @@ func initUsersRoutes(e *echo.Group, db *gorm.DB) {
 	e.POST("/forgot-password", usersController.ForgotPassword)
 	e.POST("/validate-password-reset-token", usersController.ValidatePasswordResetToken)
 	e.POST("/reset-password", usersController.ResetPassword)
-	
+
 }
 
 func initDepartmentsRoutes(e *echo.Group, db *gorm.DB) {

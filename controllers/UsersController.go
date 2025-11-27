@@ -37,6 +37,24 @@ func (u *UsersController) GetUsers(c echo.Context) error {
 	return c.JSON(http.StatusOK, users)
 }
 
+// GetAllUsers go doc
+// @Summary Get all users including deleted
+// @Description Get all users including deleted
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Success 200 {object} []models.Users
+// @Failure 500 {object} string
+// @Security JWT Token
+// @Router /users [get]
+func (u *UsersController) GetAllUsers(c echo.Context) error {
+	users, err := u.UsersService.GetAllUsers()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, users)
+}
+
 func (u *UsersController) GetUsersByRole(c echo.Context) error {
 	roleID := c.Param("role_id")
 	i, err := strconv.Atoi(roleID)
@@ -72,7 +90,9 @@ func (u *UsersController) LoginUser(c echo.Context) error {
 	}
 	data, err := u.UsersService.LoginUser(&user)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, err.Error())
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "Invalid email or password",
+		})
 	}
 	return c.JSON(http.StatusOK, data)
 }

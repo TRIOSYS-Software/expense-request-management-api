@@ -181,7 +181,6 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		}
 
 		if approverPolicyUser.Level != expenseRequest.CurrentApproverLevel {
-			fmt.Println(approverPolicyUser)
 			continue
 		}
 

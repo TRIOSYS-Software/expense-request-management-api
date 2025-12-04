@@ -180,6 +180,10 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
+		if approverPolicyUser.Level != expenseRequest.CurrentApproverLevel {
+			continue
+		}
+
 		message := fmt.Sprintf(
 			"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
 			requestUser.Name,

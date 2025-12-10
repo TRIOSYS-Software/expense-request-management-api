@@ -12,6 +12,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
+RUN mkdir /app/uploads
+
 COPY fcm_credentials.json .
 
 COPY --from=builder /app/main .

@@ -180,50 +180,53 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
-		if i == 0 {
-			message := fmt.Sprintf(
-				"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
-				requestUser.Name,
-				userRoleName,
-				expenseRequest.ID,
-				expenseRequest.Amount,
-			)
-			notificationType := "new_request"
+		if approverPolicyUser.Level != expenseRequest.CurrentApproverLevel {
+			continue
+		}
 
-			notification := &models.Notification{
-				UserID:    approverPolicyUser.UserID,
-				ExpenseID: expenseRequest.ID,
+		message := fmt.Sprintf(
+			"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
+			requestUser.Name,
+			userRoleName,
+			expenseRequest.ID,
+			expenseRequest.Amount,
+		)
+		notificationType := "new_request"
+
+		notification := &models.Notification{
+			UserID:    approverPolicyUser.UserID,
+			ExpenseID: expenseRequest.ID,
+			Message:   message,
+			Type:      notificationType,
+			IsRead:    false,
+		}
+		tokens, err := r.deviceTokenRepo.GetTokensByUserID(approverPolicyUser.UserID)
+		if err != nil {
+			log.Printf("Error fetching device tokens for user %d: %v", approverPolicyUser.UserID, err)
+		} else if len(tokens) > 0 {
+			data := map[string]string{
+				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
+				"type":      notificationType,
+			}
+			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", message, data)
+		}
+
+		if err := r.notificationRepo.CreateNotification(notification); err != nil {
+			log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
+		}
+
+		go utilities.SendWebSocketMessage(
+			approverPolicyUser.UserID,
+			utilities.WebSocketMessagePayload{
+				ID:        notification.ID,
 				Message:   message,
 				Type:      notificationType,
+				ExpenseID: expenseRequest.ID,
 				IsRead:    false,
-			}
-			tokens, err := r.deviceTokenRepo.GetTokensByUserID(approverPolicyUser.UserID)
-			if err != nil {
-				log.Printf("Error fetching device tokens for user %d: %v", approverPolicyUser.UserID, err)
-			} else if len(tokens) > 0 {
-				data := map[string]string{
-					"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
-					"type":      notificationType,
-				}
-				r.notificationRepo.SendPushNotification(tokens, "New Expense Request", message, data)
-			}
+				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+			},
+		)
 
-			if err := r.notificationRepo.CreateNotification(notification); err != nil {
-				log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
-			}
-
-			go utilities.SendWebSocketMessage(
-				approverPolicyUser.UserID,
-				utilities.WebSocketMessagePayload{
-					ID:        notification.ID,
-					Message:   message,
-					Type:      notificationType,
-					ExpenseID: expenseRequest.ID,
-					IsRead:    false,
-					CreatedAt: notification.CreatedAt.Format(time.RFC3339),
-				},
-			)
-		}
 	}
 	return tx.Commit().Error
 }

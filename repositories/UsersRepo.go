@@ -23,6 +23,13 @@ func (u *UsersRepo) GetUsers() ([]models.Users, error) {
 	return users, err
 }
 
+func (u *UsersRepo) GetAllUsers() ([]models.Users, error) {
+	var users []models.Users
+	err := u.db.Unscoped().Preload("Roles").Preload("Roles.Permissions").Preload("Departments").Model(&models.Users{}).Select("id, name, email, role_id, department_id, created_at, updated_at, deleted_at").Find(&users).Error
+	// err := u.db.Find(&users).Error
+	return users, err
+}
+
 func (u *UsersRepo) GetUserByID(id uint) (*models.Users, error) {
 	var user models.Users
 	err := u.db.Preload("Roles").Preload("Roles.Permissions").First(&user, "id = ?", id).Error

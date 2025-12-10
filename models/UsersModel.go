@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Users struct {
@@ -11,8 +13,9 @@ type Users struct {
 	Password       string                  `json:"password,omitempty" gorm:"not null"`
 	RoleID         uint                    `json:"role,omitempty" gorm:"not null"`
 	DepartmentID   *uint                   `json:"department,omitempty" gorm:"nullable"`
-	CreatedAt      time.Time               `json:"-" gorm:"autoCreateTime;not null"`
-	UpdatedAt      time.Time               `json:"-" gorm:"autoUpdateTime;not null"`
+	CreatedAt      time.Time               `json:"created_at" gorm:"autoCreateTime;not null"`
+	UpdatedAt      time.Time               `json:"updated_at" gorm:"autoUpdateTime;not null"`
+	DeletedAt      gorm.DeletedAt          `json:"deleted_at" gorm:"index"`
 	Roles          *Roles                  `json:"roles,omitempty" gorm:"foreignKey:RoleID;references:ID"`
 	Departments    *Departments            `json:"departments,omitempty" gorm:"foreignKey:DepartmentID;references:ID"`
 	PolicyUsers    []ApprovalPoliciesUsers `json:"policy_users,omitempty" gorm:"foreignKey:UserID;references:ID"`

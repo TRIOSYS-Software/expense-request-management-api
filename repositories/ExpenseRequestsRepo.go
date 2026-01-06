@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/utilities"
@@ -19,6 +20,7 @@ type ExpenseRequestsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
 	deviceTokenRepo  *DeviceTokenRepo
+	uploadDir        string
 }
 
 func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequestsRepo {
@@ -26,6 +28,7 @@ func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequ
 		db:               db,
 		notificationRepo: NewNotificationRepo(db, firebaseApp),
 		deviceTokenRepo:  NewDeviceTokenRepo(db),
+		uploadDir:        configs.Envs.UploadDir,
 	}
 }
 
@@ -328,7 +331,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 
 	if expenseRequest.Attachment != nil && *expenseRequest.Attachment != "" {
 		if old_expenseRequest.Attachment != nil {
-			oldFilePath := filepath.Join("uploads", *old_expenseRequest.Attachment)
+			oldFilePath := filepath.Join(r.uploadDir, *old_expenseRequest.Attachment)
 			if _, err := os.Stat(oldFilePath); err == nil {
 				os.Remove(oldFilePath)
 			}

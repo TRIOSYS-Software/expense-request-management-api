@@ -24,3 +24,10 @@ func (s *ExpenseApprovalsService) GetExpenseApprovalsByApproverID(approverID uin
 func (s *ExpenseApprovalsService) UpdateExpenseApproval(id uint, expenseApproval *models.ExpenseApprovals) error {
 	return s.repo.UpdateExpenseApproval(id, expenseApproval)
 }
+
+func (s *ExpenseApprovalsService) UpdateExpenseApprovalComment(
+	id uint,
+	comments string,
+) error {
+	return s.repo.UpdateExpenseApprovalComment(id, comments)
+}

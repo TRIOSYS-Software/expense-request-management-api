@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"errors"
 	"fmt"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/utilities"
@@ -188,4 +189,26 @@ func (r *ExpenseApprovalsRepo) sendSingleNotification(
 			CreatedAt: notification.CreatedAt.Format(time.RFC3339),
 		},
 	)
+}
+
+func (r *ExpenseApprovalsRepo) UpdateExpenseApprovalComment(
+	id uint,
+	comments string,
+) error {
+	result := r.db.
+		Model(&models.ExpenseApprovals{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"comments": comments,
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return errors.New("no expense approval updated (invalid id?)")
+	}
+
+	return nil
 }

@@ -139,9 +139,10 @@ func initExpenseApprovalsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebas
 	expenseApprovalsRepo := repositories.NewExpenseApprovalsRepo(db, firebaseApp)
 	expenseApprovalsService := services.NewExpenseApprovalsService(expenseApprovalsRepo)
 	expenseApprovalsController := controllers.NewExpenseApprovalsController(expenseApprovalsService)
+	e.PUT("/approvals/:id/comment", expenseApprovalsController.UpdateExpenseApprovalComment, middlewares.IsAuthenticated)
+	e.PUT("/expense-approvals/:id", expenseApprovalsController.UpdateExpenseApproval, middlewares.IsAuthenticated)
 	e.GET("/expense-approvals", expenseApprovalsController.GetExpenseApprovals, middlewares.IsAuthenticated)
 	e.GET("/expense-approvals/approver/:approver_id", expenseApprovalsController.GetExpenseApprovalsByApproverID, middlewares.IsAuthenticated)
-	e.PUT("/expense-approvals/:id", expenseApprovalsController.UpdateExpenseApproval, middlewares.IsAuthenticated)
 }
 
 func initNotificationRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {

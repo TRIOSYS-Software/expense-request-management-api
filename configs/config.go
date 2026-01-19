@@ -84,6 +84,15 @@ func loadEnv(env string) *Config {
 }
 
 func initUploadDir() string {
+	workingDir, err := os.Getwd()
+	if err == nil {
+		uploadDir := filepath.Join(workingDir, "uploads")
+		if err := os.MkdirAll(uploadDir, os.ModePerm); err == nil {
+			log.Printf("Upload directory initialized at working directory: %s\n", uploadDir)
+			return uploadDir
+		}
+	}
+
 	execPath, err := os.Executable()
 	if err == nil {
 		execDir := filepath.Dir(execPath)
@@ -93,19 +102,9 @@ func initUploadDir() string {
 			return uploadDir
 		}
 	}
-	workingDir, err := os.Getwd()
-	if err != nil {
-		log.Printf("Warning: Could not determine working directory: %v\n", err)
-		return "uploads"
-	}
 
-	uploadDir := filepath.Join(workingDir, "uploads")
-	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-		log.Printf("Warning: Could not create upload directory: %v\n", err)
-	}
-
-	log.Printf("Upload directory initialized at working directory: %s\n", uploadDir)
-	return uploadDir
+	log.Printf("Warning: Could not determine upload directory, using relative path\n")
+	return "uploads"
 }
 
 func (c *Config) ConnectDB() error {
@@ -145,6 +144,7 @@ func (c *Config) InitializedDB() {
 	c.DB.AutoMigrate(
 		&models.Users{},
 		&models.ExpenseRequests{},
+		&models.ExpenseRequestAttachments{},
 		&models.ExpenseItems{},
 		&models.ApprovalPolicies{},
 		&models.ExpenseApprovals{},

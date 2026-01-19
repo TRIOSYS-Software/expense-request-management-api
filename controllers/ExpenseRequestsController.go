@@ -197,9 +197,51 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		expenseRequest.Attachment = nil
 	}
 
+	// Handle Multiple Attachments
+	form, err := c.MultipartForm()
+	if err == nil {
+		files := form.File["attachments"]
+		for _, file := range files {
+			src, err := file.Open()
+			if err != nil {
+				continue
+			}
+			defer src.Close()
+
+			ext := filepath.Ext(file.Filename)
+			uniqueFileName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), "multi", ext)
+
+			if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
+				continue
+			}
+
+			dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				continue
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, src); err != nil {
+				continue
+			}
+
+			expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
+				FilePath: uniqueFileName,
+				FileName: file.Filename,
+				FileType: file.Header.Get("Content-Type"),
+			})
+		}
+	}
+
 	if err := ex.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
 		if expenseRequest.Attachment != nil {
 			dstPath := filepath.Join(ex.UploadDir, *expenseRequest.Attachment)
+			os.Remove(dstPath)
+		}
+		// Cleanup multi attachments on failure
+		for _, att := range expenseRequest.Attachments {
+			dstPath := filepath.Join(ex.UploadDir, att.FilePath)
 			os.Remove(dstPath)
 		}
 		return c.JSON(http.StatusNotFound, err.Error())
@@ -302,6 +344,57 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 		}
 
 		expenseRequest.Attachment = &uniqueFileName
+	}
+
+	// Manually bind KeptAttachmentIDs and KeepLegacyAttachment
+	form, _ := c.MultipartForm()
+	if form != nil {
+		if keptIDs, ok := form.Value["kept_attachment_ids"]; ok {
+			for _, idStr := range keptIDs {
+				if id, err := strconv.Atoi(idStr); err == nil {
+					expenseRequest.KeptAttachmentIDs = append(expenseRequest.KeptAttachmentIDs, uint(id))
+				}
+			}
+		}
+		if val, ok := form.Value["keep_legacy_attachment"]; ok && len(val) > 0 {
+			expenseRequest.KeepLegacyAttachment, _ = strconv.ParseBool(val[0])
+		}
+	}
+
+	// Handle Multiple Attachments for Update
+	if form, err = c.MultipartForm(); err == nil {
+		files := form.File["attachments"]
+		for _, file := range files {
+			src, err := file.Open()
+			if err != nil {
+				continue
+			}
+			defer src.Close()
+
+			ext := filepath.Ext(file.Filename)
+			uniqueFileName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), "multi", ext)
+
+			if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
+				continue
+			}
+
+			dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				continue
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, src); err != nil {
+				continue
+			}
+
+			expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
+				FilePath: uniqueFileName,
+				FileName: file.Filename,
+				FileType: file.Header.Get("Content-Type"),
+			})
+		}
 	}
 
 	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {

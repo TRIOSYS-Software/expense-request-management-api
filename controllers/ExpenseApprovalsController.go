@@ -62,3 +62,43 @@ func (con *ExpenseApprovalsController) UpdateExpenseApproval(c echo.Context) err
 	}
 	return c.JSON(http.StatusOK, ExpenseApprovals)
 }
+
+type UpdateExpenseApprovalCommentDTO struct {
+	Comments string `json:"comments"`
+}
+
+// UpdateExpenseApprovalComment update a expense approval comment
+// @Summary Update a expense approval comment
+// @Description Update a expense approval comment
+// @Tags ExpenseApprovals
+// @Accept json
+// @Produce json
+// @Param id path int true "ExpenseApproval ID"
+// @Param ExpenseApproval body models.ExpenseApprovals true "ExpenseApproval"
+// @Success 200 {object} models.ExpenseApprovals
+// @Failure 400 {object} string
+// @Failure 404 {object} string
+// @Router /approvals/{id}/comment [put]
+// @Security JWT Token
+func (con *ExpenseApprovalsController) UpdateExpenseApprovalComment(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, err)
+	}
+
+	var dto UpdateExpenseApprovalCommentDTO
+	if err := c.Bind(&dto); err != nil {
+		return c.JSON(http.StatusBadRequest, err)
+	}
+
+	if err := con.ExpenseApprovalsService.UpdateExpenseApprovalComment(
+		uint(id),
+		dto.Comments,
+	); err != nil {
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"message": "Comment updated successfully",
+	})
+}

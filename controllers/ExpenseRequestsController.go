@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
 	"strconv"
@@ -16,10 +17,14 @@ import (
 
 type ExpenseRequestsController struct {
 	ExpenseRequestsService *services.ExpenseRequestsService
+	UploadDir              string
 }
 
 func NewExpenseRequestsController(expenseRequestsService *services.ExpenseRequestsService) *ExpenseRequestsController {
-	return &ExpenseRequestsController{ExpenseRequestsService: expenseRequestsService}
+	return &ExpenseRequestsController{
+		ExpenseRequestsService: expenseRequestsService,
+		UploadDir:              configs.Envs.UploadDir,
+	}
 }
 
 func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
@@ -173,18 +178,11 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		ext := filepath.Ext(file.Filename)
 		uniqueFileName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
 
-		workingDir, err := os.Getwd()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to get working directory")
-		}
-
-		uploadDir := filepath.Join(workingDir, "uploads")
-
-		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to create upload directory")
 		}
 
-		dstPath := filepath.Join(uploadDir, uniqueFileName)
+		dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
 		dst, err := os.Create(dstPath)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to create file")
@@ -199,9 +197,51 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 		expenseRequest.Attachment = nil
 	}
 
+	// Handle Multiple Attachments
+	form, err := c.MultipartForm()
+	if err == nil {
+		files := form.File["attachments"]
+		for _, file := range files {
+			src, err := file.Open()
+			if err != nil {
+				continue
+			}
+			defer src.Close()
+
+			ext := filepath.Ext(file.Filename)
+			uniqueFileName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), "multi", ext)
+
+			if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
+				continue
+			}
+
+			dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				continue
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, src); err != nil {
+				continue
+			}
+
+			expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
+				FilePath: uniqueFileName,
+				FileName: file.Filename,
+				FileType: file.Header.Get("Content-Type"),
+			})
+		}
+	}
+
 	if err := ex.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
 		if expenseRequest.Attachment != nil {
-			dstPath := filepath.Join("uploads", *expenseRequest.Attachment)
+			dstPath := filepath.Join(ex.UploadDir, *expenseRequest.Attachment)
+			os.Remove(dstPath)
+		}
+		// Cleanup multi attachments on failure
+		for _, att := range expenseRequest.Attachments {
+			dstPath := filepath.Join(ex.UploadDir, att.FilePath)
 			os.Remove(dstPath)
 		}
 		return c.JSON(http.StatusNotFound, err.Error())
@@ -288,17 +328,11 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 		ext := filepath.Ext(file.Filename)
 		uniqueFileName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
 
-		workingDir, err := os.Getwd()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to get working directory")
-		}
-
-		uploadDir := filepath.Join(workingDir, "uploads")
-		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to create upload directory")
 		}
 
-		dstPath := filepath.Join(uploadDir, uniqueFileName)
+		dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
 		dst, err := os.Create(dstPath)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to create file")
@@ -310,6 +344,57 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 		}
 
 		expenseRequest.Attachment = &uniqueFileName
+	}
+
+	// Manually bind KeptAttachmentIDs and KeepLegacyAttachment
+	form, _ := c.MultipartForm()
+	if form != nil {
+		if keptIDs, ok := form.Value["kept_attachment_ids"]; ok {
+			for _, idStr := range keptIDs {
+				if id, err := strconv.Atoi(idStr); err == nil {
+					expenseRequest.KeptAttachmentIDs = append(expenseRequest.KeptAttachmentIDs, uint(id))
+				}
+			}
+		}
+		if val, ok := form.Value["keep_legacy_attachment"]; ok && len(val) > 0 {
+			expenseRequest.KeepLegacyAttachment, _ = strconv.ParseBool(val[0])
+		}
+	}
+
+	// Handle Multiple Attachments for Update
+	if form, err = c.MultipartForm(); err == nil {
+		files := form.File["attachments"]
+		for _, file := range files {
+			src, err := file.Open()
+			if err != nil {
+				continue
+			}
+			defer src.Close()
+
+			ext := filepath.Ext(file.Filename)
+			uniqueFileName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), "multi", ext)
+
+			if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
+				continue
+			}
+
+			dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				continue
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, src); err != nil {
+				continue
+			}
+
+			expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
+				FilePath: uniqueFileName,
+				FileName: file.Filename,
+				FileType: file.Header.Get("Content-Type"),
+			})
+		}
 	}
 
 	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {
@@ -355,10 +440,6 @@ func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error 
 // @Security JWT Token
 func (ex *ExpenseRequestsController) ServeExpenseRequestAttachment(c echo.Context) error {
 	file := c.Param("filename")
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Failed to Get path")
-	}
-	filePath := filepath.Join(workingDir, "uploads", file)
+	filePath := filepath.Join(ex.UploadDir, file)
 	return c.File(filePath)
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/utilities"
@@ -19,6 +20,7 @@ type ExpenseRequestsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
 	deviceTokenRepo  *DeviceTokenRepo
+	uploadDir        string
 }
 
 func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequestsRepo {
@@ -26,6 +28,7 @@ func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequ
 		db:               db,
 		notificationRepo: NewNotificationRepo(db, firebaseApp),
 		deviceTokenRepo:  NewDeviceTokenRepo(db),
+		uploadDir:        configs.Envs.UploadDir,
 	}
 }
 
@@ -38,6 +41,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 	}).
 		Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
 		Find(&expenseRequests)
 	return expenseRequests
@@ -51,6 +55,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 		Preload("Approvals").
 		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		Preload("Attachments").
 		First(&expenseRequest, id).Error
 	return &expenseRequest, err
 }
@@ -64,6 +69,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.Expen
 		Preload("Projects").
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
+		Preload("Attachments").
 		Order("expense_requests.created_at DESC").Find(&expenseRequests)
 	return expenseRequests
 }
@@ -311,6 +317,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 		Preload("User", func(db *gorm.DB) *gorm.DB {
 			return db.Select("id, name, email") // Select specific fields for User
 		}).
+		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
 		Find(&expenseRequests)
 	return expenseRequests
@@ -330,14 +337,53 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	old_expenseRequest.PaymentMethod = expenseRequest.PaymentMethod
 	old_expenseRequest.GLAccount = expenseRequest.GLAccount
 
-	if expenseRequest.Attachment != nil && *expenseRequest.Attachment != "" {
-		if old_expenseRequest.Attachment != nil {
-			oldFilePath := filepath.Join("uploads", *old_expenseRequest.Attachment)
+	// Handle Legacy Attachment Retention
+	if old_expenseRequest.Attachment != nil {
+		if !expenseRequest.KeepLegacyAttachment {
+			// User wants to remove the legacy attachment
+			oldFilePath := filepath.Join(r.uploadDir, *old_expenseRequest.Attachment)
 			if _, err := os.Stat(oldFilePath); err == nil {
 				os.Remove(oldFilePath)
 			}
+			old_expenseRequest.Attachment = nil
 		}
-		old_expenseRequest.Attachment = expenseRequest.Attachment
+	}
+
+	var existingAttachments []models.ExpenseRequestAttachments
+	if err := tx.Where("expense_request_id = ?", old_expenseRequest.ID).Find(&existingAttachments).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	keptIDsMap := make(map[uint]bool)
+	for _, id := range expenseRequest.KeptAttachmentIDs {
+		keptIDsMap[id] = true
+	}
+
+	for _, att := range existingAttachments {
+		if !keptIDsMap[att.ID] {
+			// Delete from DB
+			if err := tx.Delete(&att).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+			// Delete from Disk
+			filePath := filepath.Join(r.uploadDir, att.FilePath)
+			if _, err := os.Stat(filePath); err == nil {
+				os.Remove(filePath)
+			}
+		}
+	}
+
+	// Handle New Attachments
+	if len(expenseRequest.Attachments) > 0 {
+		for _, att := range expenseRequest.Attachments {
+			att.ExpenseRequestID = old_expenseRequest.ID
+			if err := tx.Create(&att).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
 	}
 
 	if old_expenseRequest.Project != expenseRequest.Project || old_expenseRequest.Amount != expenseRequest.Amount {

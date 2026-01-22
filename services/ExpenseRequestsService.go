@@ -58,8 +58,7 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 		if err := callSQLACCAPI(expenseRequest, expenseRequest.PaymentMethods.DESCRIPTION); err != nil {
 			return err
 		}
-		expenseRequest.IsSendToSQLACC = true
-		if err := s.UpdateExpenseRequest(expenseRequest.ID, expenseRequest); err != nil {
+		if err := s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true); err != nil {
 			return err
 		}
 	}

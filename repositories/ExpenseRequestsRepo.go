@@ -444,6 +444,10 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	return tx.Commit().Error
 }
 
+func (r *ExpenseRequestsRepo) UpdateSendToSQLACCStatus(id uint, status bool) error {
+	return r.db.Model(&models.ExpenseRequests{}).Where("id = ?", id).Update("is_send_to_sqlacc", status).Error
+}
+
 func (r *ExpenseRequestsRepo) DeleteExpenseRequest(id uint) error {
 	tx := r.db.Begin()
 	if err := tx.Where("request_id = ?", id).Delete(&models.ExpenseApprovals{}).Error; err != nil {

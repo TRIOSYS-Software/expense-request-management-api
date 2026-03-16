@@ -18,58 +18,83 @@ func SendEmail(to []string, subject string, body string) error {
 
 func SendMailViaMailcow(to []string, subject string, body string) error {
 	// Mailcow SMTP Configuration
-	mailcowServer := configs.Envs.SMTP_HOST         // Replace with your Mailcow server address
-	port, _ := strconv.Atoi(configs.Envs.SMTP_PORT) // 587 (STARTTLS) or 465 (SSL/TLS)
-	username := configs.Envs.EMAIL_USERNAME         // Mailcow email address
-	password := configs.Envs.EMAIL_PASSWORD         // Mailcow application password
+	mailcowServer := configs.Envs.SMTP_HOST
+	portStr := configs.Envs.SMTP_PORT
+	username := configs.Envs.EMAIL_USERNAME
+	password := configs.Envs.EMAIL_PASSWORD
 
-	// Authentication
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid SMTP port: %v", err)
+	}
+
+	addr := fmt.Sprintf("%s:%d", mailcowServer, port)
+
+	// Auth
 	auth := smtp.PlainAuth("", username, password, mailcowServer)
 
-	// TLS Configuration
+	// TLS Config
+	skipVerify := configs.Envs.Environment == "dev"
 	tlsConfig := &tls.Config{
 		ServerName:         mailcowServer,
-		InsecureSkipVerify: false, // Set to false if using valid certificate
+		InsecureSkipVerify: skipVerify,
 	}
-	// Connect to SMTP server
-	conn, err := smtp.Dial(fmt.Sprintf("%s:%d", mailcowServer, port))
-	if err != nil {
-		return err
+
+	var conn *smtp.Client
+
+	if port == 465 {
+		tlsConn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to dial TLS: %v", err)
+		}
+		conn, err = smtp.NewClient(tlsConn, mailcowServer)
+		if err != nil {
+			return fmt.Errorf("failed to create SMTP client: %v", err)
+		}
+	} else {
+		conn, err = smtp.Dial(addr)
+		if err != nil {
+			return fmt.Errorf("failed to dial SMTP: %v", err)
+		}
+
+		if ok, _ := conn.Extension("STARTTLS"); ok {
+			if err = conn.StartTLS(tlsConfig); err != nil {
+				conn.Close()
+				return fmt.Errorf("failed to start TLS: %v", err)
+			}
+		}
 	}
 	defer conn.Close()
 
-	// Start TLS (for port 587)
-	if ok, _ := conn.Extension("STARTTLS"); ok {
-		if err = conn.StartTLS(tlsConfig); err != nil {
-			return err
-		}
-	}
-
 	// Authenticate
 	if err = conn.Auth(auth); err != nil {
-		return err
+		if strings.Contains(err.Error(), "unencrypted connection") {
+			return fmt.Errorf("authentication failed: server requires TLS but connection is not encrypted (check STARTTLS support)")
+		}
+		return fmt.Errorf("failed to authenticate: %v", err)
 	}
 
-	// Set sender and recipient
+	// Set sender
 	if err = conn.Mail(username); err != nil {
-		return err
+		return fmt.Errorf("failed to set sender: %v", err)
 	}
 
+	// Set recipients
 	for _, recipient := range to {
 		if err = conn.Rcpt(recipient); err != nil {
-			return err
+			return fmt.Errorf("failed to set recipient %s: %v", recipient, err)
 		}
 	}
 
-	// Send email body
+	// Send Data
 	w, err := conn.Data()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get data writer: %v", err)
 	}
-	defer w.Close()
 
-	fromHeader := "From: Admin\r\n"
-	toHeader := fmt.Sprintf("To: %s\r\n", strings.Join(to, ", ")) // Convert []string to, ", "))
+	// Headers
+	fromHeader := fmt.Sprintf("From: %s\r\n", username)
+	toHeader := fmt.Sprintf("To: %s\r\n", strings.Join(to, ", "))
 	dateHeader := fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z))
 	subjectHeader := fmt.Sprintf("Subject: %s\r\n", subject)
 	mimeHeader := "MIME-Version: 1.0\r\n"
@@ -82,14 +107,18 @@ func SendMailViaMailcow(to []string, subject string, body string) error {
 			subjectHeader +
 			mimeHeader +
 			contentType +
-			"\r\n" + // Empty line between headers and body
+			"\r\n" +
 			body,
 	)
 
 	if _, err = w.Write(msg); err != nil {
-		return err
+		w.Close()
+		return fmt.Errorf("failed to write email body: %v", err)
 	}
 
-	conn.Quit()
-	return nil
+	if err = w.Close(); err != nil {
+		return fmt.Errorf("failed to close data writer: %v", err)
+	}
+
+	return conn.Quit()
 }

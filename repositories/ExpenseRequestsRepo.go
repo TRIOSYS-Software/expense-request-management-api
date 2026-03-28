@@ -63,8 +63,10 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 	return &expenseRequest, err
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.ExpenseRequests {
+func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
+	var total int64
+	r.db.Model(&models.ExpenseRequests{}).Where("user_id = ?", id).Count(&total)
 	r.db.Where("user_id = ?", id).Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email")
 	}).
@@ -73,8 +75,10 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.Expen
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Attachments").
-		Order("expense_requests.created_at DESC").Find(&expenseRequests)
-	return expenseRequests
+		Order("expense_requests.created_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&expenseRequests)
+	return expenseRequests, total
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
@@ -275,8 +279,13 @@ func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.Exp
 	return &approvalPolicy, nil
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.ExpenseRequests {
+func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
+	var total int64
+	r.db.Model(&models.ExpenseRequests{}).
+		Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+		Where("expense_approvals.approver_id = ?", id).
+		Count(&total)
 	r.db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
 		Where("expense_approvals.approver_id = ?", id).
 		Preload("Projects").
@@ -284,15 +293,16 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").
 		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
-			return db.Select("id, name, email") // Select specific fields for Users
+			return db.Select("id, name, email")
 		}).
 		Preload("User", func(db *gorm.DB) *gorm.DB {
-			return db.Select("id, name, email") // Select specific fields for User
+			return db.Select("id, name, email")
 		}).
 		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
+		Offset(offset).Limit(limit).
 		Find(&expenseRequests)
-	return expenseRequests
+	return expenseRequests, total
 }
 
 func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {

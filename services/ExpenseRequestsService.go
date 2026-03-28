@@ -29,8 +29,8 @@ func (s *ExpenseRequestsService) GetExpenseRequestByID(id uint) (*models.Expense
 	return s.ExpenseRequestsRepo.GetExpenseRequestByID(id)
 }
 
-func (s *ExpenseRequestsService) GetExpenseRequestsByUserID(id uint) []models.ExpenseRequests {
-	return s.ExpenseRequestsRepo.GetExpenseRequestsByUserID(id)
+func (s *ExpenseRequestsService) GetExpenseRequestsByUserID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
+	return s.ExpenseRequestsRepo.GetExpenseRequestsByUserID(id, offset, limit)
 }
 
 func (s *ExpenseRequestsService) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
@@ -41,8 +41,8 @@ func (s *ExpenseRequestsService) CreateExpenseRequest(expenseRequest *models.Exp
 	return s.ExpenseRequestsRepo.CreateExpenseRequest(expenseRequest)
 }
 
-func (s *ExpenseRequestsService) GetExpenseRequestByApproverID(id uint) []models.ExpenseRequests {
-	return s.ExpenseRequestsRepo.GetExpenseRequestByApproverID(id)
+func (s *ExpenseRequestsService) GetExpenseRequestByApproverID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
+	return s.ExpenseRequestsRepo.GetExpenseRequestByApproverID(id, offset, limit)
 }
 
 func (s *ExpenseRequestsService) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {

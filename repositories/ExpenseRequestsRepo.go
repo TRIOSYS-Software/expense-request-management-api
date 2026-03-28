@@ -32,8 +32,10 @@ func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequ
 	}
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
+func (r *ExpenseRequestsRepo) GetExpenseRequests(offset, limit int) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
+	var total int64
+	r.db.Model(&models.ExpenseRequests{}).Count(&total)
 	r.db.Preload("Projects").Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
@@ -43,8 +45,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
+		Offset(offset).Limit(limit).
 		Find(&expenseRequests)
-	return expenseRequests
+	return expenseRequests, total
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseRequests, error) {

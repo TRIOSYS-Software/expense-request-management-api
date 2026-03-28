@@ -124,9 +124,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
 	tx := r.db.Begin()
 	defer func() {
-		if r := recover(); r != nil {
+		if rec := recover(); rec != nil {
 			tx.Rollback()
-			log.Printf("PANIC recovered in CreateExpenseRequest: %v", r)
+			log.Printf("PANIC recovered in CreateExpenseRequest: %v", rec)
 		}
 	}()
 
@@ -159,19 +159,29 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		log.Printf("WARN: User %d (%s) has no role assigned or role not found for role_id: %d", requestUser.ID, requestUser.Name, requestUser.RoleID)
 	}
 
-	approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
+	approvalPolicy, err := r.findHighestPolicy(tx, expenseRequest, *requestUser.DepartmentID)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
 	var approvalPoliciesUsers []models.ApprovalPoliciesUsers
-	tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers)
+	if err := tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to retrieve approver users: %w", err)
+	}
 
 	if len(approvalPoliciesUsers) == 0 {
 		tx.Rollback()
 		return fmt.Errorf("no approver users found")
 	}
+
+	type pendingNotification struct {
+		userID  uint
+		message string
+		nType   string
+	}
+	var notifications []pendingNotification
 
 	for i, approverPolicyUser := range approvalPoliciesUsers {
 		expenseApprovals := models.ExpenseApprovals{
@@ -186,122 +196,81 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
-		if approverPolicyUser.Level != expenseRequest.CurrentApproverLevel {
-			continue
+		if approverPolicyUser.Level == expenseRequest.CurrentApproverLevel {
+			message := fmt.Sprintf(
+				"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
+				requestUser.Name,
+				userRoleName,
+				expenseRequest.ID,
+				expenseRequest.Amount,
+			)
+			notifications = append(notifications, pendingNotification{
+				userID:  approverPolicyUser.UserID,
+				message: message,
+				nType:   "new_request",
+			})
 		}
+	}
 
-		message := fmt.Sprintf(
-			"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
-			requestUser.Name,
-			userRoleName,
-			expenseRequest.ID,
-			expenseRequest.Amount,
-		)
-		notificationType := "new_request"
+	if len(notifications) == 0 {
+		log.Printf("WARN: No approver matched CurrentApproverLevel %d for expense request %d", expenseRequest.CurrentApproverLevel, expenseRequest.ID)
+	}
 
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	// Send notifications only after successful commit
+	for _, n := range notifications {
 		notification := &models.Notification{
-			UserID:    approverPolicyUser.UserID,
+			UserID:    n.userID,
 			ExpenseID: expenseRequest.ID,
-			Message:   message,
-			Type:      notificationType,
+			Message:   n.message,
+			Type:      n.nType,
 			IsRead:    false,
-		}
-		tokens, err := r.deviceTokenRepo.GetTokensByUserID(approverPolicyUser.UserID)
-		if err != nil {
-			log.Printf("Error fetching device tokens for user %d: %v", approverPolicyUser.UserID, err)
-		} else if len(tokens) > 0 {
-			data := map[string]string{
-				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
-				"type":      notificationType,
-			}
-			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", message, data)
 		}
 
 		if err := r.notificationRepo.CreateNotification(notification); err != nil {
-			log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
+			log.Printf("Error saving notification to DB for user %d: %v", n.userID, err)
+		}
+
+		tokens, err := r.deviceTokenRepo.GetTokensByUserID(n.userID)
+		if err != nil {
+			log.Printf("Error fetching device tokens for user %d: %v", n.userID, err)
+		} else if len(tokens) > 0 {
+			data := map[string]string{
+				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
+				"type":      n.nType,
+			}
+			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", n.message, data)
 		}
 
 		go utilities.SendWebSocketMessage(
-			approverPolicyUser.UserID,
+			n.userID,
 			utilities.WebSocketMessagePayload{
 				ID:        notification.ID,
-				Message:   message,
-				Type:      notificationType,
+				Message:   n.message,
+				Type:      n.nType,
 				ExpenseID: expenseRequest.ID,
 				IsRead:    false,
 				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
 			},
 		)
-
 	}
-	return tx.Commit().Error
+
+	return nil
 }
 
-func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
+func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicy models.ApprovalPolicies
-	err := r.db.Where("(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount", departmentID, request.Project, request.Amount).First(&approvalPolicy).Error
+	err := tx.Where("(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount", departmentID, request.Project, request.Amount).
+		Order("department_id IS NULL ASC").
+		First(&approvalPolicy).Error
 	if err != nil {
 		return nil, fmt.Errorf("no approval policy found")
 	}
-
-	// for _, approvalPolicy := range approvalPolicies {
-	// 	switch approvalPolicy.ConditionType {
-	// 	case "project":
-	// 		if approvalPolicy.ConditionValue == request.Project {
-	// 			return &approvalPolicy, nil
-	// 		}
-	// 	case "user":
-	// 		conditionValue, err := strconv.Atoi(approvalPolicy.ConditionValue)
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}
-	// 		if uint(conditionValue) == request.UserID {
-	// 			return &approvalPolicy, nil
-	// 		}
-	// 	case "category":
-	// 		conditionValue, err := strconv.Atoi(approvalPolicy.ConditionValue)
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}
-	// 		if request.CategoryID == uint(conditionValue) {
-	// 			return &approvalPolicy, nil
-	// 		}
-	// 	case "amount":
-	// 		if isAmountConditionMet(approvalPolicy.ConditionValue, request.Amount) {
-	// 			return &approvalPolicy, nil
-	// 		}
-	// 	}
-	// }
 	return &approvalPolicy, nil
 }
-
-// func isAmountConditionMet(condition string, amount float64) bool {
-// 	condition = strings.TrimSpace(condition) // Remove unnecessary spaces
-// 	var operator string
-// 	var value float64
-
-// 	if strings.HasPrefix(condition, ">=") || strings.HasPrefix(condition, "<=") {
-// 		operator = condition[:2]
-// 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[2:]), 64)
-// 	} else {
-// 		operator = condition[:1]
-// 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[1:]), 64)
-// 	}
-
-// 	switch operator {
-// 	case ">":
-// 		return amount > value
-// 	case "<":
-// 		return amount < value
-// 	case "=":
-// 		return amount == value
-// 	case "<=":
-// 		return amount <= value
-// 	case ">=":
-// 		return amount >= value
-// 	}
-// 	return false
-// }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.ExpenseRequests {
 	var expenseRequests []models.ExpenseRequests
@@ -406,7 +375,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		var requestUser models.Users
 		tx.Where("id = ?", expenseRequest.UserID).First(&requestUser)
 
-		approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
+		approvalPolicy, err := r.findHighestPolicy(tx, expenseRequest, *requestUser.DepartmentID)
 		if err != nil {
 			tx.Rollback()
 			return err

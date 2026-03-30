@@ -41,7 +41,7 @@ func applyFilters(db *gorm.DB, filter *dtos.ExpenseRequestFilterDTO) *gorm.DB {
 		db = db.Where("expense_requests.status = ?", filter.Status)
 	}
 	if filter.Date != "" {
-		db = db.Where("DATE(expense_requests.created_at) = ?", filter.Date)
+		db = db.Where("DATE(expense_requests.date_submitted) = ?", filter.Date)
 	}
 	if filter.Search != "" {
 		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id")
@@ -120,9 +120,18 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 	var summary dtos.ExpenseRequestSummary
 
 	db := r.db.Model(&models.ExpenseRequests{}).Preload("Approvals")
-	if filters["user_id"] != nil {
-		db = db.Where("user_id = ?", filters["user_id"])
+	if filters["user_id"] != nil && filters["approver_id"] != nil {
+		db = db.Joins("LEFT JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+			Where("(expense_requests.user_id = ? OR expense_approvals.approver_id = ?)", filters["user_id"], filters["approver_id"]).
+			Group("expense_requests.id")
+	} else if filters["user_id"] != nil {
+		db = db.Where("expense_requests.user_id = ?", filters["user_id"])
+	} else if filters["approver_id"] != nil {
+		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+			Where("expense_approvals.approver_id = ?", filters["approver_id"]).
+			Group("expense_requests.id")
 	}
+
 	if filters["status"] != nil {
 		db = db.Where("expense_requests.status = ?", filters["status"].(string))
 	}
@@ -134,11 +143,6 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 	if filters["amount"] != nil {
 		db = db.Where("amount = ?", filters["amount"])
-	}
-
-	if filters["approver_id"] != nil {
-		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-			Where("expense_approvals.approver_id = ?", filters["approver_id"])
 	}
 
 	db.Find(&expenseRequests)
@@ -159,6 +163,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 		}
 
 	}
+	summary.Total = len(expenseRequests)
 	return summary, nil
 }
 

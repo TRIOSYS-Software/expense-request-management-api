@@ -32,8 +32,10 @@ func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequ
 	}
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
+func (r *ExpenseRequestsRepo) GetExpenseRequests(offset, limit int) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
+	var total int64
+	r.db.Model(&models.ExpenseRequests{}).Count(&total)
 	r.db.Preload("Projects").Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
@@ -43,8 +45,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests() []models.ExpenseRequests {
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
+		Offset(offset).Limit(limit).
 		Find(&expenseRequests)
-	return expenseRequests
+	return expenseRequests, total
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseRequests, error) {
@@ -60,8 +63,10 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 	return &expenseRequest, err
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.ExpenseRequests {
+func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
+	var total int64
+	r.db.Model(&models.ExpenseRequests{}).Where("user_id = ?", id).Count(&total)
 	r.db.Where("user_id = ?", id).Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email")
 	}).
@@ -70,8 +75,10 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint) []models.Expen
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Attachments").
-		Order("expense_requests.created_at DESC").Find(&expenseRequests)
-	return expenseRequests
+		Order("expense_requests.created_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&expenseRequests)
+	return expenseRequests, total
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
@@ -124,9 +131,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
 	tx := r.db.Begin()
 	defer func() {
-		if r := recover(); r != nil {
+		if rec := recover(); rec != nil {
 			tx.Rollback()
-			log.Printf("PANIC recovered in CreateExpenseRequest: %v", r)
+			log.Printf("PANIC recovered in CreateExpenseRequest: %v", rec)
 		}
 	}()
 
@@ -159,19 +166,29 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		log.Printf("WARN: User %d (%s) has no role assigned or role not found for role_id: %d", requestUser.ID, requestUser.Name, requestUser.RoleID)
 	}
 
-	approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
+	approvalPolicy, err := r.findHighestPolicy(tx, expenseRequest, *requestUser.DepartmentID)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
 	var approvalPoliciesUsers []models.ApprovalPoliciesUsers
-	tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers)
+	if err := tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to retrieve approver users: %w", err)
+	}
 
 	if len(approvalPoliciesUsers) == 0 {
 		tx.Rollback()
 		return fmt.Errorf("no approver users found")
 	}
+
+	type pendingNotification struct {
+		userID  uint
+		message string
+		nType   string
+	}
+	var notifications []pendingNotification
 
 	for i, approverPolicyUser := range approvalPoliciesUsers {
 		expenseApprovals := models.ExpenseApprovals{
@@ -186,58 +203,72 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			return err
 		}
 
-		if approverPolicyUser.Level != expenseRequest.CurrentApproverLevel {
-			continue
+		if approverPolicyUser.Level == expenseRequest.CurrentApproverLevel {
+			message := fmt.Sprintf(
+				"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
+				requestUser.Name,
+				userRoleName,
+				expenseRequest.ID,
+				expenseRequest.Amount,
+			)
+			notifications = append(notifications, pendingNotification{
+				userID:  approverPolicyUser.UserID,
+				message: message,
+				nType:   "new_request",
+			})
 		}
+	}
 
-		message := fmt.Sprintf(
-			"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
-			requestUser.Name,
-			userRoleName,
-			expenseRequest.ID,
-			expenseRequest.Amount,
-		)
-		notificationType := "new_request"
+	if len(notifications) == 0 {
+		log.Printf("WARN: No approver matched CurrentApproverLevel %d for expense request %d", expenseRequest.CurrentApproverLevel, expenseRequest.ID)
+	}
 
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	// Send notifications only after successful commit
+	for _, n := range notifications {
 		notification := &models.Notification{
-			UserID:    approverPolicyUser.UserID,
+			UserID:    n.userID,
 			ExpenseID: expenseRequest.ID,
-			Message:   message,
-			Type:      notificationType,
+			Message:   n.message,
+			Type:      n.nType,
 			IsRead:    false,
-		}
-		tokens, err := r.deviceTokenRepo.GetTokensByUserID(approverPolicyUser.UserID)
-		if err != nil {
-			log.Printf("Error fetching device tokens for user %d: %v", approverPolicyUser.UserID, err)
-		} else if len(tokens) > 0 {
-			data := map[string]string{
-				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
-				"type":      notificationType,
-			}
-			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", message, data)
 		}
 
 		if err := r.notificationRepo.CreateNotification(notification); err != nil {
-			log.Printf("Error saving notification to DB for user %d: %v", approverPolicyUser.UserID, err)
+			log.Printf("Error saving notification to DB for user %d: %v", n.userID, err)
+		}
+
+		tokens, err := r.deviceTokenRepo.GetTokensByUserID(n.userID)
+		if err != nil {
+			log.Printf("Error fetching device tokens for user %d: %v", n.userID, err)
+		} else if len(tokens) > 0 {
+			data := map[string]string{
+				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
+				"type":      n.nType,
+			}
+			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", n.message, data)
 		}
 
 		go utilities.SendWebSocketMessage(
-			approverPolicyUser.UserID,
+			n.userID,
 			utilities.WebSocketMessagePayload{
 				ID:        notification.ID,
-				Message:   message,
-				Type:      notificationType,
+				Message:   n.message,
+				Type:      n.nType,
 				ExpenseID: expenseRequest.ID,
 				IsRead:    false,
 				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
 			},
 		)
-
 	}
-	return tx.Commit().Error
+
+	return nil
 }
 
-func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
+func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicy models.ApprovalPolicies
 	err := r.db.Where(
 		"(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount AND (gl_account_id = ? OR gl_account_id IS NULL)",
@@ -249,36 +280,13 @@ func (r *ExpenseRequestsRepo) FindHighestPolicy(request *models.ExpenseRequests,
 	return &approvalPolicy, nil
 }
 
-// func isAmountConditionMet(condition string, amount float64) bool {
-// 	condition = strings.TrimSpace(condition) // Remove unnecessary spaces
-// 	var operator string
-// 	var value float64
-
-// 	if strings.HasPrefix(condition, ">=") || strings.HasPrefix(condition, "<=") {
-// 		operator = condition[:2]
-// 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[2:]), 64)
-// 	} else {
-// 		operator = condition[:1]
-// 		value, _ = strconv.ParseFloat(strings.TrimSpace(condition[1:]), 64)
-// 	}
-
-// 	switch operator {
-// 	case ">":
-// 		return amount > value
-// 	case "<":
-// 		return amount < value
-// 	case "=":
-// 		return amount == value
-// 	case "<=":
-// 		return amount <= value
-// 	case ">=":
-// 		return amount >= value
-// 	}
-// 	return false
-// }
-
-func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.ExpenseRequests {
+func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
+	var total int64
+	r.db.Model(&models.ExpenseRequests{}).
+		Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+		Where("expense_approvals.approver_id = ?", id).
+		Count(&total)
 	r.db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
 		Where("expense_approvals.approver_id = ?", id).
 		Preload("Projects").
@@ -286,15 +294,16 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint) []models.Ex
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").
 		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
-			return db.Select("id, name, email") // Select specific fields for Users
+			return db.Select("id, name, email")
 		}).
 		Preload("User", func(db *gorm.DB) *gorm.DB {
-			return db.Select("id, name, email") // Select specific fields for User
+			return db.Select("id, name, email")
 		}).
 		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
+		Offset(offset).Limit(limit).
 		Find(&expenseRequests)
-	return expenseRequests
+	return expenseRequests, total
 }
 
 func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {
@@ -380,7 +389,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		var requestUser models.Users
 		tx.Where("id = ?", expenseRequest.UserID).First(&requestUser)
 
-		approvalPolicy, err := r.FindHighestPolicy(expenseRequest, *requestUser.DepartmentID)
+		approvalPolicy, err := r.findHighestPolicy(tx, expenseRequest, *requestUser.DepartmentID)
 		if err != nil {
 			tx.Rollback()
 			return err

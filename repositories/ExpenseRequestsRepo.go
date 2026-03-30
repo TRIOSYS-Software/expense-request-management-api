@@ -9,6 +9,7 @@ import (
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/utilities"
+	"strconv"
 	"time"
 
 	firebase "firebase.google.com/go/v4"
@@ -32,11 +33,40 @@ func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequ
 	}
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequests(offset, limit int) ([]models.ExpenseRequests, int64) {
+func applyFilters(db *gorm.DB, filter *dtos.ExpenseRequestFilterDTO) *gorm.DB {
+	if filter == nil {
+		return db
+	}
+	if filter.Status != "" {
+		db = db.Where("expense_requests.status = ?", filter.Status)
+	}
+	if filter.Date != "" {
+		db = db.Where("DATE(expense_requests.created_at) = ?", filter.Date)
+	}
+	if filter.Search != "" {
+		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id")
+		if idVal, err := strconv.Atoi(filter.Search); err == nil {
+			db = db.Where("(expense_requests.id = ? OR search_users.name LIKE ?)", idVal, "%"+filter.Search+"%")
+		} else {
+			db = db.Where("search_users.name LIKE ?", "%"+filter.Search+"%")
+		}
+	}
+	if filter.ApprovedByMe && filter.ApproverID != 0 {
+		db = db.Joins("JOIN expense_approvals filter_ea ON filter_ea.request_id = expense_requests.id").
+			Where("filter_ea.approver_id = ? AND filter_ea.status = 'approved'", filter.ApproverID)
+	}
+	return db
+}
+
+func (r *ExpenseRequestsRepo) GetExpenseRequests(filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
 	var total int64
-	r.db.Model(&models.ExpenseRequests{}).Count(&total)
-	r.db.Preload("Projects").Preload("GLAccounts").
+	
+	db := r.db.Model(&models.ExpenseRequests{})
+	db = applyFilters(db, filter)
+	db.Count(&total)
+
+	db.Preload("Projects").Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email, role_id, department_id")
@@ -45,8 +75,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(offset, limit int) ([]models.Ex
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
-		Offset(offset).Limit(limit).
+		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&expenseRequests)
+		
 	return expenseRequests, total
 }
 
@@ -63,11 +94,14 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 	return &expenseRequest, err
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
+func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
 	var total int64
-	r.db.Model(&models.ExpenseRequests{}).Where("user_id = ?", id).Count(&total)
-	r.db.Where("user_id = ?", id).Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
+	db := r.db.Model(&models.ExpenseRequests{}).Where("expense_requests.user_id = ?", id)
+	db = applyFilters(db, filter)
+	db.Count(&total)
+
+	db.Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email")
 	}).
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
@@ -76,7 +110,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, offset, limit 
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
-		Offset(offset).Limit(limit).
+		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&expenseRequests)
 	return expenseRequests, total
 }
@@ -280,16 +314,16 @@ func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.Exp
 	return &approvalPolicy, nil
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
+func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
 	var total int64
-	r.db.Model(&models.ExpenseRequests{}).
+	db := r.db.Model(&models.ExpenseRequests{}).
 		Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-		Where("expense_approvals.approver_id = ?", id).
-		Count(&total)
-	r.db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-		Where("expense_approvals.approver_id = ?", id).
-		Preload("Projects").
+		Where("expense_approvals.approver_id = ?", id)
+	db = applyFilters(db, filter)
+	db.Count(&total)
+
+	db.Preload("Projects").
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").
@@ -301,7 +335,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, offset, lim
 		}).
 		Preload("Attachments").
 		Order("expense_requests.created_at DESC").
-		Offset(offset).Limit(limit).
+		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&expenseRequests)
 	return expenseRequests, total
 }

@@ -29,13 +29,13 @@ func NewExpenseRequestsController(expenseRequestsService *services.ExpenseReques
 }
 
 func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
-	var paginationReq dtos.PaginationRequest
-	if err := c.Bind(&paginationReq); err != nil {
+	var filterReq dtos.ExpenseRequestFilterDTO
+	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
 
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequests(paginationReq.Offset(), paginationReq.Limit())
-	pagination := dtos.NewPaginationResponse(paginationReq.Page, paginationReq.Limit(), int(total))
+	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequests(&filterReq)
+	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
 		"pagination": pagination,
@@ -85,12 +85,12 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Invalid user id")
 	}
-	var paginationReq dtos.PaginationRequest
-	if err := c.Bind(&paginationReq); err != nil {
+	var filterReq dtos.ExpenseRequestFilterDTO
+	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i), paginationReq.Offset(), paginationReq.Limit())
-	pagination := dtos.NewPaginationResponse(paginationReq.Page, paginationReq.Limit(), int(total))
+	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i), &filterReq)
+	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
 		"pagination": pagination,
@@ -285,12 +285,12 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Invalid user id")
 	}
-	var paginationReq dtos.PaginationRequest
-	if err := c.Bind(&paginationReq); err != nil {
+	var filterReq dtos.ExpenseRequestFilterDTO
+	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), paginationReq.Offset(), paginationReq.Limit())
-	pagination := dtos.NewPaginationResponse(paginationReq.Page, paginationReq.Limit(), int(total))
+	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), &filterReq)
+	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
 		"pagination": pagination,

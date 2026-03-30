@@ -22,13 +22,18 @@ func (a *ApprovalPoliciesRepo) GetApprovalPolicies() ([]models.ApprovalPolicies,
 		Preload("PolicyUsers.Approver", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Departments").
 		Preload("Projects").
+		Preload("GLAccounts").
 		Find(&approvalPolicies).Error
 	return approvalPolicies, err
 }
 
 func (a *ApprovalPoliciesRepo) GetApprovalPolicyByID(id uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicy models.ApprovalPolicies
-	err := a.db.Preload("PolicyUsers", func(db *gorm.DB) *gorm.DB { return db.Order("level ASC") }).Preload("PolicyUsers.Approver", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).Preload("Departments").First(&approvalPolicy, id).Error
+	err := a.db.Preload("PolicyUsers", func(db *gorm.DB) *gorm.DB { return db.Order("level ASC") }).
+		Preload("PolicyUsers.Approver", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
+		Preload("Departments").
+		Preload("GLAccounts").
+		First(&approvalPolicy, id).Error
 	return &approvalPolicy, err
 }
 
@@ -40,9 +45,10 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 		MaxAmount:    approvalPolicyDTO.MaxAmount,
 		Project:      approvalPolicyDTO.Project,
 		DepartmentID: approvalPolicyDTO.DepartmentID,
+		GLAccountID:  approvalPolicyDTO.GLAccountID,
 	}
 
-	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID) {
+	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID, approvalPolicy.GLAccountID) {
 		tx.Rollback()
 		return fmt.Errorf("amount range overlapping")
 	}
@@ -71,25 +77,27 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 	return tx.Commit().Error
 }
 
-func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, deprtmentID *uint) bool {
+func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, deprtmentID *uint, glAccountID *string) bool {
 	var count int64
 
+	query := db.Model(&models.ApprovalPolicies{}).
+		Where("project = ?", project).
+		Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount)
+
 	if deprtmentID != nil {
-		if err := db.Model(&models.ApprovalPolicies{}).
-			Where("project = ?", project).
-			Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount).
-			Where("department_id = ?", deprtmentID).
-			Count(&count).Error; err != nil {
-			return false
-		}
+		query = query.Where("department_id = ?", deprtmentID)
 	} else {
-		if err := db.Model(&models.ApprovalPolicies{}).
-			Where("project = ?", project).
-			Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount).
-			Where("department_id IS NULL").
-			Count(&count).Error; err != nil {
-			return false
-		}
+		query = query.Where("department_id IS NULL")
+	}
+
+	if glAccountID != nil {
+		query = query.Where("gl_account_id = ?", glAccountID)
+	} else {
+		query = query.Where("gl_account_id IS NULL")
+	}
+
+	if err := query.Count(&count).Error; err != nil {
+		return false
 	}
 
 	return count > 0
@@ -108,6 +116,7 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *
 	approvalPoliciesToUpdate.MaxAmount = approvalPolicyDTO.MaxAmount
 	approvalPoliciesToUpdate.Project = approvalPolicyDTO.Project
 	approvalPoliciesToUpdate.DepartmentID = approvalPolicyDTO.DepartmentID
+	approvalPoliciesToUpdate.GLAccountID = approvalPolicyDTO.GLAccountID
 
 	// if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID) {
 	// 	tx.Rollback()
@@ -163,3 +172,4 @@ func (a *ApprovalPoliciesRepo) DeleteApprovalPolicy(id uint) error {
 
 	return tx.Commit().Error
 }
+

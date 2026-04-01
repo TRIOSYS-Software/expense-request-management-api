@@ -32,11 +32,15 @@ func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequ
 	}
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequests(offset, limit int) ([]models.ExpenseRequests, int64) {
+func (r *ExpenseRequestsRepo) GetExpenseRequests(offset, limit int, status string) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
 	var total int64
-	r.db.Model(&models.ExpenseRequests{}).Count(&total)
-	r.db.Preload("Projects").Preload("GLAccounts").
+	query := r.db.Model(&models.ExpenseRequests{})
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	query.Count(&total)
+	query.Preload("Projects").Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email, role_id, department_id")
@@ -63,11 +67,15 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 	return &expenseRequest, err
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
+func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, offset, limit int, status string) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
 	var total int64
-	r.db.Model(&models.ExpenseRequests{}).Where("user_id = ?", id).Count(&total)
-	r.db.Where("user_id = ?", id).Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
+	query := r.db.Model(&models.ExpenseRequests{}).Where("user_id = ?", id)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	query.Count(&total)
+	query.Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email")
 	}).
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
@@ -279,16 +287,22 @@ func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.Exp
 	return &approvalPolicy, nil
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
+func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, offset, limit int, status string) ([]models.ExpenseRequests, int64) {
 	var expenseRequests []models.ExpenseRequests
 	var total int64
-	r.db.Model(&models.ExpenseRequests{}).
+	countQuery := r.db.Model(&models.ExpenseRequests{}).
 		Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-		Where("expense_approvals.approver_id = ?", id).
-		Count(&total)
-	r.db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-		Where("expense_approvals.approver_id = ?", id).
-		Preload("Projects").
+		Where("expense_approvals.approver_id = ?", id)
+	if status != "" {
+		countQuery = countQuery.Where("expense_requests.status = ?", status)
+	}
+	countQuery.Count(&total)
+	dataQuery := r.db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+		Where("expense_approvals.approver_id = ?", id)
+	if status != "" {
+		dataQuery = dataQuery.Where("expense_requests.status = ?", status)
+	}
+	dataQuery.Preload("Projects").
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").

@@ -21,16 +21,16 @@ func NewExpenseRequestsService(expenseRequestsRepo *repositories.ExpenseRequests
 	return &ExpenseRequestsService{ExpenseRequestsRepo: expenseRequestsRepo}
 }
 
-func (s *ExpenseRequestsService) GetExpenseRequests(offset, limit int) ([]models.ExpenseRequests, int64) {
-	return s.ExpenseRequestsRepo.GetExpenseRequests(offset, limit)
+func (s *ExpenseRequestsService) GetExpenseRequests(offset, limit int, status string) ([]models.ExpenseRequests, int64) {
+	return s.ExpenseRequestsRepo.GetExpenseRequests(offset, limit, status)
 }
 
 func (s *ExpenseRequestsService) GetExpenseRequestByID(id uint) (*models.ExpenseRequests, error) {
 	return s.ExpenseRequestsRepo.GetExpenseRequestByID(id)
 }
 
-func (s *ExpenseRequestsService) GetExpenseRequestsByUserID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
-	return s.ExpenseRequestsRepo.GetExpenseRequestsByUserID(id, offset, limit)
+func (s *ExpenseRequestsService) GetExpenseRequestsByUserID(id uint, offset, limit int, status string) ([]models.ExpenseRequests, int64) {
+	return s.ExpenseRequestsRepo.GetExpenseRequestsByUserID(id, offset, limit, status)
 }
 
 func (s *ExpenseRequestsService) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
@@ -41,8 +41,8 @@ func (s *ExpenseRequestsService) CreateExpenseRequest(expenseRequest *models.Exp
 	return s.ExpenseRequestsRepo.CreateExpenseRequest(expenseRequest)
 }
 
-func (s *ExpenseRequestsService) GetExpenseRequestByApproverID(id uint, offset, limit int) ([]models.ExpenseRequests, int64) {
-	return s.ExpenseRequestsRepo.GetExpenseRequestByApproverID(id, offset, limit)
+func (s *ExpenseRequestsService) GetExpenseRequestByApproverID(id uint, offset, limit int, status string) ([]models.ExpenseRequests, int64) {
+	return s.ExpenseRequestsRepo.GetExpenseRequestByApproverID(id, offset, limit, status)
 }
 
 func (s *ExpenseRequestsService) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {

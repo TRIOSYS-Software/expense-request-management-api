@@ -34,7 +34,8 @@ func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
 
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequests(paginationReq.Offset(), paginationReq.Limit())
+	status := c.QueryParam("status")
+	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequests(paginationReq.Offset(), paginationReq.Limit(), status)
 	pagination := dtos.NewPaginationResponse(paginationReq.Page, paginationReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
@@ -89,7 +90,8 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 	if err := c.Bind(&paginationReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i), paginationReq.Offset(), paginationReq.Limit())
+	status := c.QueryParam("status")
+	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i), paginationReq.Offset(), paginationReq.Limit(), status)
 	pagination := dtos.NewPaginationResponse(paginationReq.Page, paginationReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
@@ -289,7 +291,8 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	if err := c.Bind(&paginationReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), paginationReq.Offset(), paginationReq.Limit())
+	status := c.QueryParam("status")
+	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), paginationReq.Offset(), paginationReq.Limit(), status)
 	pagination := dtos.NewPaginationResponse(paginationReq.Page, paginationReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,

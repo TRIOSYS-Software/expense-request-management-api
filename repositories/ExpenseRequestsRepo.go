@@ -278,9 +278,10 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 
 func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicy models.ApprovalPolicies
-	err := tx.Where("(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount", departmentID, request.Project, request.Amount).
-		Order("department_id IS NULL ASC").
-		First(&approvalPolicy).Error
+	err := r.db.Where(
+		"(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount AND (gl_account_id = ? OR gl_account_id IS NULL)",
+		departmentID, request.Project, request.Amount, request.GLAccount,
+	).Order("gl_account_id IS NULL ASC").First(&approvalPolicy).Error
 	if err != nil {
 		return nil, fmt.Errorf("no approval policy found")
 	}

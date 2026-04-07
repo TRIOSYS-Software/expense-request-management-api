@@ -44,12 +44,20 @@ func applyFilters(db *gorm.DB, filter *dtos.ExpenseRequestFilterDTO) *gorm.DB {
 		db = db.Where("DATE(expense_requests.date_submitted) = ?", filter.Date)
 	}
 	if filter.Search != "" {
-		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id")
+		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id").
+			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = expense_requests.project")
+		searchPattern := "%" + filter.Search + "%"
 		if idVal, err := strconv.Atoi(filter.Search); err == nil {
-			db = db.Where("(expense_requests.id = ? OR search_users.name LIKE ?)", idVal, "%"+filter.Search+"%")
+			db = db.Where("(expense_requests.id = ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, searchPattern, searchPattern, searchPattern)
 		} else {
-			db = db.Where("search_users.name LIKE ?", "%"+filter.Search+"%")
+			db = db.Where("(search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", searchPattern, searchPattern, searchPattern)
 		}
+	}
+	if filter.MinAmount != nil {
+		db = db.Where("expense_requests.amount >= ?", *filter.MinAmount)
+	}
+	if filter.MaxAmount != nil {
+		db = db.Where("expense_requests.amount <= ?", *filter.MaxAmount)
 	}
 	if filter.ApprovedByMe && filter.ApproverID != 0 {
 		db = db.Joins("JOIN expense_approvals filter_ea ON filter_ea.request_id = expense_requests.id").

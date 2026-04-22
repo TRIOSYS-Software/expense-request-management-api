@@ -34,7 +34,10 @@ func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
 
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequests(&filterReq)
+	// Extract admin's user ID from JWT context (same behavior as approver)
+	approverID := uint(c.Get("user_id").(float64))
+
+	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequests(approverID, &filterReq)
 	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,

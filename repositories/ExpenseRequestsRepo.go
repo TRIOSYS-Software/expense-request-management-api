@@ -91,7 +91,6 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 		Order("expense_requests.created_at DESC").
 		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&expenseRequests)
-
 	return expenseRequests, total
 }
 

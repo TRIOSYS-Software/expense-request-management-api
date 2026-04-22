@@ -21,8 +21,8 @@ func NewExpenseRequestsService(expenseRequestsRepo *repositories.ExpenseRequests
 	return &ExpenseRequestsService{ExpenseRequestsRepo: expenseRequestsRepo}
 }
 
-func (s *ExpenseRequestsService) GetExpenseRequests(filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
-	return s.ExpenseRequestsRepo.GetExpenseRequests(filter)
+func (s *ExpenseRequestsService) GetExpenseRequests(approverID uint, filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
+	return s.ExpenseRequestsRepo.GetExpenseRequests(approverID, filter)
 }
 
 func (s *ExpenseRequestsService) GetExpenseRequestByID(id uint) (*models.ExpenseRequests, error) {

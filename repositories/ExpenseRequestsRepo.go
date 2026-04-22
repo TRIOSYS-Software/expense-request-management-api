@@ -72,14 +72,17 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 	// Admin: no status filter = see all requests | with status filter = same as approver
 	if filter != nil && filter.Status != "" {
 		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-			Where("expense_approvals.approver_id = ?", approverID).
-			Where("expense_approvals.status = ?", filter.Status)
+			Where("expense_approvals.approver_id = ?", approverID)
 		if filter.Status == "pending" {
 			// Pending: only show if request is actually at this approver's level right now
-			db = db.Where("expense_approvals.level = expense_requests.current_approver_level")
-		} else {
-			// Approved/Rejected: show historical actions
-			db = db.Where("expense_approvals.level <= expense_requests.current_approver_level")
+			db = db.Where("expense_approvals.level = expense_requests.current_approver_level").
+				Where("expense_approvals.status = 'pending'")
+		} else if filter.Status == "approved" {
+			// Approved: show if approver personally approved OR another approver at the same level approved (level moved past)
+			db = db.Where("(expense_approvals.status = 'approved' OR expense_approvals.level < expense_requests.current_approver_level)")
+		} else if filter.Status == "rejected" {
+			// Rejected: show if approver personally rejected OR request was rejected at their level by another approver
+			db = db.Where("(expense_approvals.status = 'rejected' OR (expense_requests.status = 'rejected' AND expense_approvals.level <= expense_requests.current_approver_level))")
 		}
 	}
 
@@ -354,10 +357,16 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dto
 
 	// Approver status filter: based on expense_approvals.status
 	if filter != nil && filter.Status != "" {
-		db = db.Where("expense_approvals.status = ?", filter.Status)
 		if filter.Status == "pending" {
 			// Pending: only show if request is actually at this approver's level right now
-			db = db.Where("expense_approvals.level = expense_requests.current_approver_level")
+			db = db.Where("expense_approvals.status = 'pending'").
+				Where("expense_approvals.level = expense_requests.current_approver_level")
+		} else if filter.Status == "approved" {
+			// Approved: show if approver personally approved OR another approver at the same level approved
+			db = db.Where("(expense_approvals.status = 'approved' OR expense_approvals.level < expense_requests.current_approver_level)")
+		} else if filter.Status == "rejected" {
+			// Rejected: show if approver personally rejected OR request was rejected at their level by another approver
+			db = db.Where("(expense_approvals.status = 'rejected' OR (expense_requests.status = 'rejected' AND expense_approvals.level <= expense_requests.current_approver_level))")
 		}
 	}
 

@@ -67,14 +67,14 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 	var expenseRequests []models.ExpenseRequests
 	var total int64
 
-	db := r.db.Model(&models.ExpenseRequests{}).
-		Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-		Where("expense_approvals.approver_id = ?", approverID).
-		Where("expense_approvals.level <= expense_requests.current_approver_level")
+	db := r.db.Model(&models.ExpenseRequests{})
 
-	// Admin status filter: based on expense_approvals.status (same as approver)
+	// Admin: no status filter = see all requests | with status filter = same as approver
 	if filter != nil && filter.Status != "" {
-		db = db.Where("expense_approvals.status = ?", filter.Status)
+		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+			Where("expense_approvals.approver_id = ?", approverID).
+			Where("expense_approvals.level <= expense_requests.current_approver_level").
+			Where("expense_approvals.status = ?", filter.Status)
 	}
 
 	db = applyFilters(db, filter)

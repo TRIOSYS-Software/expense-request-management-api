@@ -73,8 +73,14 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 	if filter != nil && filter.Status != "" {
 		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
 			Where("expense_approvals.approver_id = ?", approverID).
-			Where("expense_approvals.level <= expense_requests.current_approver_level").
 			Where("expense_approvals.status = ?", filter.Status)
+		if filter.Status == "pending" {
+			// Pending: only show if request is actually at this approver's level right now
+			db = db.Where("expense_approvals.level = expense_requests.current_approver_level")
+		} else {
+			// Approved/Rejected: show historical actions
+			db = db.Where("expense_approvals.level <= expense_requests.current_approver_level")
+		}
 	}
 
 	db = applyFilters(db, filter)
@@ -349,6 +355,10 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dto
 	// Approver status filter: based on expense_approvals.status
 	if filter != nil && filter.Status != "" {
 		db = db.Where("expense_approvals.status = ?", filter.Status)
+		if filter.Status == "pending" {
+			// Pending: only show if request is actually at this approver's level right now
+			db = db.Where("expense_approvals.level = expense_requests.current_approver_level")
+		}
 	}
 
 	db = applyFilters(db, filter)

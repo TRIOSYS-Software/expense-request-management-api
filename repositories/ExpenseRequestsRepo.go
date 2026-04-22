@@ -304,43 +304,45 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		return err
 	}
 
-	// Send notifications only after successful commit
-	for _, n := range notifications {
-		notification := &models.Notification{
-			UserID:    n.userID,
-			ExpenseID: expenseRequest.ID,
-			Message:   n.message,
-			Type:      n.nType,
-			IsRead:    false,
-		}
-
-		if err := r.notificationRepo.CreateNotification(notification); err != nil {
-			log.Printf("Error saving notification to DB for user %d: %v", n.userID, err)
-		}
-
-		tokens, err := r.deviceTokenRepo.GetTokensByUserID(n.userID)
-		if err != nil {
-			log.Printf("Error fetching device tokens for user %d: %v", n.userID, err)
-		} else if len(tokens) > 0 {
-			data := map[string]string{
-				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
-				"type":      n.nType,
-			}
-			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", n.message, data)
-		}
-
-		go utilities.SendWebSocketMessage(
-			n.userID,
-			utilities.WebSocketMessagePayload{
-				ID:        notification.ID,
+	// Send notifications in background — don't block the HTTP response
+	go func() {
+		for _, n := range notifications {
+			notification := &models.Notification{
+				UserID:    n.userID,
+				ExpenseID: expenseRequest.ID,
 				Message:   n.message,
 				Type:      n.nType,
-				ExpenseID: expenseRequest.ID,
 				IsRead:    false,
-				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
-			},
-		)
-	}
+			}
+
+			if err := r.notificationRepo.CreateNotification(notification); err != nil {
+				log.Printf("Error saving notification to DB for user %d: %v", n.userID, err)
+			}
+
+			tokens, err := r.deviceTokenRepo.GetTokensByUserID(n.userID)
+			if err != nil {
+				log.Printf("Error fetching device tokens for user %d: %v", n.userID, err)
+			} else if len(tokens) > 0 {
+				data := map[string]string{
+					"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
+					"type":      n.nType,
+				}
+				r.notificationRepo.SendPushNotification(tokens, "New Expense Request", n.message, data)
+			}
+
+			utilities.SendWebSocketMessage(
+				n.userID,
+				utilities.WebSocketMessagePayload{
+					ID:        notification.ID,
+					Message:   n.message,
+					Type:      n.nType,
+					ExpenseID: expenseRequest.ID,
+					IsRead:    false,
+					CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+				},
+			)
+		}
+	}()
 
 	return nil
 }

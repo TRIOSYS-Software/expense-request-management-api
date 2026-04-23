@@ -69,21 +69,30 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 
 	db := r.db.Model(&models.ExpenseRequests{})
 
-	// Admin: no status filter = see all requests | with status filter = same as approver
 	if filter != nil && filter.Status != "" {
-		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-			Where("expense_approvals.approver_id = ?", approverID)
 		if filter.Status == "pending" {
-			// Pending: only show if request is actually at this approver's level right now
-			db = db.Where("expense_approvals.level = expense_requests.current_approver_level").
-				Where("expense_approvals.status = 'pending'")
+			// Admin Pending: only their own pending requests (their turn)
+			db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+				Where("expense_approvals.approver_id = ?", approverID).
+				Where("expense_requests.status = 'pending'").
+				Where("expense_approvals.level = expense_requests.current_approver_level")
 		} else if filter.Status == "approved" {
-			// Approved: show if approver personally approved OR another approver at the same level approved (level moved past)
-			db = db.Where("(expense_approvals.status = 'approved' OR expense_approvals.level < expense_requests.current_approver_level)")
+			// Admin Approved: every approved request 
+			db = db.Where("expense_requests.status = 'approved'")
 		} else if filter.Status == "rejected" {
-			// Rejected: show if approver personally rejected OR request was rejected at their level by another approver
-			db = db.Where("(expense_approvals.status = 'rejected' OR (expense_requests.status = 'rejected' AND expense_approvals.level <= expense_requests.current_approver_level))")
+			// Admin Rejected: every rejected request, except ones that didn't reach admin's level
+			db = db.Joins("LEFT JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id AND expense_approvals.approver_id = ?", approverID).
+				Where("expense_requests.status = 'rejected'").
+				Where("(expense_approvals.id IS NULL OR expense_approvals.level <= expense_requests.current_approver_level)")
 		}
+	} else {
+		// Admin All: every approved + every rejected + only their pending
+		db = db.Joins("LEFT JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id AND expense_approvals.approver_id = ?", approverID).
+			Where(`(
+				expense_requests.status = 'approved'
+				OR expense_requests.status = 'rejected'
+				OR (expense_requests.status = 'pending' AND expense_approvals.id IS NOT NULL AND expense_approvals.level = expense_requests.current_approver_level)
+			)`)
 	}
 
 	db = applyFilters(db, filter)
@@ -295,43 +304,45 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		return err
 	}
 
-	// Send notifications only after successful commit
-	for _, n := range notifications {
-		notification := &models.Notification{
-			UserID:    n.userID,
-			ExpenseID: expenseRequest.ID,
-			Message:   n.message,
-			Type:      n.nType,
-			IsRead:    false,
-		}
-
-		if err := r.notificationRepo.CreateNotification(notification); err != nil {
-			log.Printf("Error saving notification to DB for user %d: %v", n.userID, err)
-		}
-
-		tokens, err := r.deviceTokenRepo.GetTokensByUserID(n.userID)
-		if err != nil {
-			log.Printf("Error fetching device tokens for user %d: %v", n.userID, err)
-		} else if len(tokens) > 0 {
-			data := map[string]string{
-				"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
-				"type":      n.nType,
-			}
-			r.notificationRepo.SendPushNotification(tokens, "New Expense Request", n.message, data)
-		}
-
-		go utilities.SendWebSocketMessage(
-			n.userID,
-			utilities.WebSocketMessagePayload{
-				ID:        notification.ID,
+	// Send notifications in background — don't block the HTTP response
+	go func() {
+		for _, n := range notifications {
+			notification := &models.Notification{
+				UserID:    n.userID,
+				ExpenseID: expenseRequest.ID,
 				Message:   n.message,
 				Type:      n.nType,
-				ExpenseID: expenseRequest.ID,
 				IsRead:    false,
-				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
-			},
-		)
-	}
+			}
+
+			if err := r.notificationRepo.CreateNotification(notification); err != nil {
+				log.Printf("Error saving notification to DB for user %d: %v", n.userID, err)
+			}
+
+			tokens, err := r.deviceTokenRepo.GetTokensByUserID(n.userID)
+			if err != nil {
+				log.Printf("Error fetching device tokens for user %d: %v", n.userID, err)
+			} else if len(tokens) > 0 {
+				data := map[string]string{
+					"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
+					"type":      n.nType,
+				}
+				r.notificationRepo.SendPushNotification(tokens, "New Expense Request", n.message, data)
+			}
+
+			utilities.SendWebSocketMessage(
+				n.userID,
+				utilities.WebSocketMessagePayload{
+					ID:        notification.ID,
+					Message:   n.message,
+					Type:      n.nType,
+					ExpenseID: expenseRequest.ID,
+					IsRead:    false,
+					CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+				},
+			)
+		}
+	}()
 
 	return nil
 }
@@ -353,22 +364,25 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dto
 	var total int64
 	db := r.db.Model(&models.ExpenseRequests{}).
 		Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-		Where("expense_approvals.approver_id = ?", id).
-		Where("expense_approvals.level <= expense_requests.current_approver_level")
+		Where("expense_approvals.approver_id = ?", id)
 
-	// Approver status filter: based on expense_approvals.status
 	if filter != nil && filter.Status != "" {
+		db = db.Where("expense_requests.status = ?", filter.Status)
 		if filter.Status == "pending" {
-			// Pending: only show if request is actually at this approver's level right now
-			db = db.Where("expense_approvals.status = 'pending'").
-				Where("expense_approvals.level = expense_requests.current_approver_level")
-		} else if filter.Status == "approved" {
-			// Approved: show if approver personally approved OR another approver at the same level approved
-			db = db.Where("(expense_approvals.status = 'approved' OR expense_approvals.level < expense_requests.current_approver_level)")
+			// Pending: only if it's the approver's turn
+			db = db.Where("expense_approvals.level = expense_requests.current_approver_level")
 		} else if filter.Status == "rejected" {
-			// Rejected: show if approver personally rejected OR request was rejected at their level by another approver
-			db = db.Where("(expense_approvals.status = 'rejected' OR (expense_requests.status = 'rejected' AND expense_approvals.level <= expense_requests.current_approver_level))")
+			// Rejected: only if approver's level was reached
+			db = db.Where("expense_approvals.level <= expense_requests.current_approver_level")
 		}
+		// Approved: no level restriction — any approver part of the flow can see
+	} else {
+		// All: union of pending (their turn) + approved (part of flow) + rejected (level reached)
+		db = db.Where(`(
+			(expense_requests.status = 'pending' AND expense_approvals.level = expense_requests.current_approver_level)
+			OR (expense_requests.status = 'approved')
+			OR (expense_requests.status = 'rejected' AND expense_approvals.level <= expense_requests.current_approver_level)
+		)`)
 	}
 
 	db = applyFilters(db, filter)

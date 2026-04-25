@@ -9,6 +9,7 @@ import (
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/utilities"
+	"sort"
 	"strconv"
 	"time"
 
@@ -173,8 +174,8 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 	}
 
 	if filters["start_date"] != nil && filters["end_date"] != nil {
-		db = db.Where("date_submitted BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
-		summary.DailyTotal = make(map[string]float64)
+		db = db.Where("DATE(date_submitted) BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
+		summary.DailyTotal = make(map[string]dtos.DailyBreakdown)
 	}
 
 	if filters["amount"] != nil {
@@ -195,7 +196,16 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 		if filters["start_date"] != nil && filters["end_date"] != nil {
 			date := expenseRequest.DateSubmitted.Format("2006-01-02")
-			summary.DailyTotal[date] = summary.DailyTotal[date] + expenseRequest.Amount
+			entry := summary.DailyTotal[date]
+			switch expenseRequest.Status {
+			case "approved":
+				entry.Approved += expenseRequest.Amount
+			case "pending":
+				entry.Pending += expenseRequest.Amount
+			case "rejected":
+				entry.Rejected += expenseRequest.Amount
+			}
+			summary.DailyTotal[date] = entry
 		}
 
 	}
@@ -539,4 +549,267 @@ func (r *ExpenseRequestsRepo) DeleteExpenseRequest(id uint) error {
 		return err
 	}
 	return tx.Commit().Error
+}
+
+func (r *ExpenseRequestsRepo) GetAnalytics(filters map[string]any) (dtos.AnalyticsResponse, error) {
+	var result dtos.AnalyticsResponse
+
+	// Build base approved-request scope reusable across sub-queries.
+	baseApproved := func() *gorm.DB {
+		q := r.db.Table("expense_requests er").Where("er.status = 'approved'")
+		if filters["start_date"] != nil && filters["end_date"] != nil {
+			q = q.Where("DATE(er.date_submitted) BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
+		}
+		if filters["user_id"] != nil {
+			q = q.Where("er.user_id = ?", filters["user_id"])
+		}
+		if filters["approver_id"] != nil {
+			q = q.Joins("JOIN expense_approvals _af ON _af.request_id = er.id AND _af.approver_id = ?", filters["approver_id"])
+		}
+		return q
+	}
+
+	// Spend by project.
+	type spendRow struct {
+		Code   string
+		Name   string
+		Amount float64
+	}
+	var projectRows []spendRow
+	baseApproved().
+		Select("er.project AS code, COALESCE(p.DESCRIPTION, er.project) AS name, SUM(er.amount) AS amount").
+		Joins("LEFT JOIN projects p ON p.CODE = er.project").
+		Group("er.project, p.DESCRIPTION").
+		Order("amount DESC").
+		Limit(10).
+		Scan(&projectRows)
+	for _, row := range projectRows {
+		result.SpendByProject = append(result.SpendByProject, dtos.AnalyticsSpendItem{
+			Name: row.Name, Code: row.Code, Amount: row.Amount,
+		})
+	}
+
+	// Spend by GL account.
+	var glRows []spendRow
+	baseApproved().
+		Select("er.gl_account AS code, COALESCE(ga.DESCRIPTION, er.gl_account) AS name, SUM(er.amount) AS amount").
+		Joins("LEFT JOIN gl_accs ga ON ga.DOCKEY = er.gl_account").
+		Group("er.gl_account, ga.DESCRIPTION").
+		Order("amount DESC").
+		Limit(10).
+		Scan(&glRows)
+	for _, row := range glRows {
+		result.SpendByGL = append(result.SpendByGL, dtos.AnalyticsSpendItem{
+			Name: row.Name, Code: row.Code, Amount: row.Amount,
+		})
+	}
+
+	// Spend by payment method.
+	var pmRows []spendRow
+	baseApproved().
+		Select("er.payment_method AS code, COALESCE(pm.DESCRIPTION, er.payment_method) AS name, SUM(er.amount) AS amount").
+		Joins("LEFT JOIN payment_methods pm ON pm.CODE = er.payment_method").
+		Group("er.payment_method, pm.DESCRIPTION").
+		Order("amount DESC").
+		Scan(&pmRows)
+	for _, row := range pmRows {
+		result.SpendByPayment = append(result.SpendByPayment, dtos.AnalyticsSpendItem{
+			Name: row.Name, Code: row.Code, Amount: row.Amount,
+		})
+	}
+
+	// Top submitters (by approved spend).
+	type lbRow struct {
+		ID     uint
+		Name   string
+		Team   string
+		Amount float64
+		Count  int
+	}
+	var submitterRows []lbRow
+	baseApproved().
+		Select("u.id AS id, u.name AS name, COALESCE(d.name, '') AS team, SUM(er.amount) AS amount, COUNT(er.id) AS count").
+		Joins("JOIN users u ON u.id = er.user_id").
+		Joins("LEFT JOIN departments d ON d.id = u.department_id").
+		Group("u.id, u.name, d.name").
+		Order("amount DESC").
+		Limit(10).
+		Scan(&submitterRows)
+	for _, row := range submitterRows {
+		result.TopSubmitters = append(result.TopSubmitters, dtos.AnalyticsLeaderboardItem{
+			ID: row.ID, Name: row.Name, Team: row.Team, Amount: row.Amount, Count: row.Count,
+		})
+	}
+
+	// Top approvers (by approved amount across their approvals).
+	approversQ := r.db.Table("expense_approvals ea").
+		Select("u.id AS id, u.name AS name, COALESCE(d.name, '') AS team, SUM(er.amount) AS amount, COUNT(ea.id) AS count").
+		Joins("JOIN users u ON u.id = ea.approver_id").
+		Joins("LEFT JOIN departments d ON d.id = u.department_id").
+		Joins("JOIN expense_requests er ON er.id = ea.request_id").
+		Where("ea.status = 'approved'")
+	if filters["start_date"] != nil && filters["end_date"] != nil {
+		approversQ = approversQ.Where("DATE(er.date_submitted) BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
+	}
+	if filters["user_id"] != nil {
+		approversQ = approversQ.Where("er.user_id = ?", filters["user_id"])
+	}
+	var approverRows []lbRow
+	approversQ.
+		Group("u.id, u.name, d.name").
+		Order("amount DESC").
+		Limit(10).
+		Scan(&approverRows)
+	for _, row := range approverRows {
+		result.TopApprovers = append(result.TopApprovers, dtos.AnalyticsLeaderboardItem{
+			ID: row.ID, Name: row.Name, Team: row.Team, Amount: row.Amount, Count: row.Count,
+		})
+	}
+
+	// Recent activity: merge latest submissions + latest approval actions.
+	type activityEvent struct {
+		Kind   string
+		Who    string
+		Code   string
+		Text   string
+		Amount float64
+		At     time.Time
+	}
+	var events []activityEvent
+
+	// Recent expense request submissions.
+	type submissionRow struct {
+		ID            uint
+		Amount        float64
+		SubmitterName string
+		DateSubmitted time.Time
+		Status        string
+	}
+	var submissions []submissionRow
+	submissionQ := r.db.Table("expense_requests er").
+		Select("er.id, er.amount, u.name AS submitter_name, er.date_submitted, er.status").
+		Joins("JOIN users u ON u.id = er.user_id").
+		Order("er.date_submitted DESC").
+		Limit(20)
+	if filters["start_date"] != nil && filters["end_date"] != nil {
+		submissionQ = submissionQ.Where("DATE(er.date_submitted) BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
+	}
+	if filters["user_id"] != nil {
+		submissionQ = submissionQ.Where("er.user_id = ?", filters["user_id"])
+	}
+	if filters["approver_id"] != nil {
+		submissionQ = submissionQ.
+			Joins("JOIN expense_approvals _sa ON _sa.request_id = er.id AND _sa.approver_id = ?", filters["approver_id"])
+	}
+	submissionQ.Scan(&submissions)
+	for _, s := range submissions {
+		kind := s.Status
+		text := "submitted"
+		if s.Status == "approved" {
+			text = "submitted (approved)"
+		} else if s.Status == "rejected" {
+			text = "submitted (rejected)"
+		}
+		events = append(events, activityEvent{
+			Kind:   kind,
+			Who:    s.SubmitterName,
+			Code:   fmt.Sprintf("EXP-%05d", s.ID),
+			Text:   text,
+			Amount: s.Amount,
+			At:     s.DateSubmitted,
+		})
+	}
+
+	// Recent approval actions.
+	type approvalActionRow struct {
+		RequestID    uint
+		Amount       float64
+		ApproverName string
+		ApprovalDate time.Time
+		Status       string
+	}
+	var approvalActions []approvalActionRow
+	approvalActionsQ := r.db.Table("expense_approvals ea").
+		Select("ea.request_id, er.amount, u.name AS approver_name, ea.approval_date, ea.status").
+		Joins("JOIN users u ON u.id = ea.approver_id").
+		Joins("JOIN expense_requests er ON er.id = ea.request_id").
+		Where("ea.status IN ('approved', 'rejected') AND ea.approval_date IS NOT NULL").
+		Order("ea.approval_date DESC").
+		Limit(20)
+	if filters["start_date"] != nil && filters["end_date"] != nil {
+		approvalActionsQ = approvalActionsQ.Where("DATE(er.date_submitted) BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
+	}
+	if filters["user_id"] != nil {
+		approvalActionsQ = approvalActionsQ.Where("er.user_id = ?", filters["user_id"])
+	}
+	if filters["approver_id"] != nil {
+		approvalActionsQ = approvalActionsQ.Where("ea.approver_id = ?", filters["approver_id"])
+	}
+	approvalActionsQ.Scan(&approvalActions)
+	for _, a := range approvalActions {
+		text := "approved"
+		if a.Status == "rejected" {
+			text = "rejected"
+		}
+		events = append(events, activityEvent{
+			Kind:   a.Status,
+			Who:    a.ApproverName,
+			Code:   fmt.Sprintf("EXP-%05d", a.RequestID),
+			Text:   text,
+			Amount: a.Amount,
+			At:     a.ApprovalDate,
+		})
+	}
+
+	// Sort all events by time DESC, deduplicate by Code+Kind, take top 15.
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].At.After(events[j].At)
+	})
+	seen := make(map[string]bool)
+	for _, ev := range events {
+		key := ev.Code + ev.Kind
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result.RecentActivity = append(result.RecentActivity, dtos.AnalyticsActivityItem{
+			Kind:   ev.Kind,
+			Who:    ev.Who,
+			Code:   ev.Code,
+			Text:   ev.Text,
+			Amount: ev.Amount,
+			When:   humanizeTime(ev.At),
+		})
+		if len(result.RecentActivity) >= 15 {
+			break
+		}
+	}
+
+	return result, nil
+}
+
+func humanizeTime(t time.Time) string {
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		mins := int(diff.Minutes())
+		if mins == 1 {
+			return "1 min ago"
+		}
+		return fmt.Sprintf("%d min ago", mins)
+	case diff < 24*time.Hour:
+		hrs := int(diff.Hours())
+		if hrs == 1 {
+			return "1 hr ago"
+		}
+		return fmt.Sprintf("%d hr ago", hrs)
+	default:
+		days := int(diff.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	}
 }

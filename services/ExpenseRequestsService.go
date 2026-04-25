@@ -37,6 +37,10 @@ func (s *ExpenseRequestsService) GetExpenseRequestsSummary(filters map[string]an
 	return s.ExpenseRequestsRepo.GetExpenseRequestsSummary(filters)
 }
 
+func (s *ExpenseRequestsService) GetAnalytics(filters map[string]any) (dtos.AnalyticsResponse, error) {
+	return s.ExpenseRequestsRepo.GetAnalytics(filters)
+}
+
 func (s *ExpenseRequestsService) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
 	return s.ExpenseRequestsRepo.CreateExpenseRequest(expenseRequest)
 }

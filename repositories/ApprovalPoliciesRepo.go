@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
+	"strconv"
 
 	"gorm.io/gorm"
 )
@@ -37,6 +38,18 @@ func (a *ApprovalPoliciesRepo) GetApprovalPolicyByID(id uint) (*models.ApprovalP
 	return &approvalPolicy, err
 }
 
+func glAccsFromIDs(ids []string) []models.GLAcc {
+	var glAccs []models.GLAcc
+	for _, idStr := range ids {
+		dockey, err := strconv.Atoi(idStr)
+		if err != nil {
+			continue
+		}
+		glAccs = append(glAccs, models.GLAcc{DOCKEY: dockey})
+	}
+	return glAccs
+}
+
 func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.ApprovalPolicyRequestDTO) error {
 	tx := a.db.Begin()
 
@@ -45,10 +58,9 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 		MaxAmount:    approvalPolicyDTO.MaxAmount,
 		Project:      approvalPolicyDTO.Project,
 		DepartmentID: approvalPolicyDTO.DepartmentID,
-		GLAccountID:  approvalPolicyDTO.GLAccountID,
 	}
 
-	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID, approvalPolicy.GLAccountID) {
+	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID) {
 		tx.Rollback()
 		return fmt.Errorf("amount range overlapping")
 	}
@@ -56,6 +68,14 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 	if err := tx.Create(&approvalPolicy).Error; err != nil {
 		tx.Rollback()
 		return err
+	}
+
+	if len(approvalPolicyDTO.GLAccountIDs) > 0 {
+		glAccs := glAccsFromIDs(approvalPolicyDTO.GLAccountIDs)
+		if err := tx.Model(&approvalPolicy).Association("GLAccounts").Replace(glAccs); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 
 	var PolicyUser []models.ApprovalPoliciesUsers
@@ -77,23 +97,17 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 	return tx.Commit().Error
 }
 
-func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, deprtmentID *uint, glAccountID *string) bool {
+func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, departmentID *uint) bool {
 	var count int64
 
 	query := db.Model(&models.ApprovalPolicies{}).
 		Where("project = ?", project).
 		Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount)
 
-	if deprtmentID != nil {
-		query = query.Where("department_id = ?", deprtmentID)
+	if departmentID != nil {
+		query = query.Where("department_id = ?", departmentID)
 	} else {
 		query = query.Where("department_id IS NULL")
-	}
-
-	if glAccountID != nil {
-		query = query.Where("gl_account_id = ?", glAccountID)
-	} else {
-		query = query.Where("gl_account_id IS NULL")
 	}
 
 	if err := query.Count(&count).Error; err != nil {
@@ -116,14 +130,14 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *
 	approvalPoliciesToUpdate.MaxAmount = approvalPolicyDTO.MaxAmount
 	approvalPoliciesToUpdate.Project = approvalPolicyDTO.Project
 	approvalPoliciesToUpdate.DepartmentID = approvalPolicyDTO.DepartmentID
-	approvalPoliciesToUpdate.GLAccountID = approvalPolicyDTO.GLAccountID
-
-	// if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID) {
-	// 	tx.Rollback()
-	// 	return fmt.Errorf("amount range overlapping")
-	// }
 
 	if err := tx.Save(&approvalPoliciesToUpdate).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	glAccs := glAccsFromIDs(approvalPolicyDTO.GLAccountIDs)
+	if err := tx.Model(&approvalPoliciesToUpdate).Association("GLAccounts").Replace(glAccs); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -160,6 +174,11 @@ func (a *ApprovalPoliciesRepo) DeleteApprovalPolicy(id uint) error {
 		return err
 	}
 
+	if err := tx.Where("approval_policy_id = ?", id).Delete(&models.ApprovalPolicyGLAccount{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	if err := tx.Where("approval_policy_id = ?", id).Delete(&models.ApprovalPoliciesUsers{}).Error; err != nil {
 		tx.Rollback()
 		return err
@@ -172,4 +191,3 @@ func (a *ApprovalPoliciesRepo) DeleteApprovalPolicy(id uint) error {
 
 	return tx.Commit().Error
 }
-

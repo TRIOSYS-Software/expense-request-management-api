@@ -10,6 +10,6 @@ type ApprovalPolicyRequestDTO struct {
 	MaxAmount    float64         `json:"max_amount"`
 	Project      string          `json:"project"`
 	DepartmentID *uint           `json:"department_id"`
-	GLAccountID  *string         `json:"gl_account_id"`
+	GLAccountIDs []string        `json:"gl_account_ids"`
 	Approvers    []ApproverInput `json:"approvers"`
 }

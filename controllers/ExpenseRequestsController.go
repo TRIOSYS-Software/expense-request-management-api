@@ -171,6 +171,48 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) e
 	return c.JSON(http.StatusOK, summary)
 }
 
+func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
+	filters := make(map[string]any)
+
+	if c.QueryParam("start_date") != "" {
+		startDate, err := time.Parse("2006-01-02", c.QueryParam("start_date"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid start date")
+		}
+		filters["start_date"] = startDate
+	}
+
+	if c.QueryParam("end_date") != "" {
+		endDate, err := time.Parse("2006-01-02", c.QueryParam("end_date"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid end date")
+		}
+		filters["end_date"] = endDate
+	}
+
+	if c.QueryParam("user_id") != "" {
+		userID, err := strconv.Atoi(c.QueryParam("user_id"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid user ID")
+		}
+		filters["user_id"] = uint(userID)
+	}
+
+	if c.QueryParam("approver_id") != "" {
+		approverID, err := strconv.Atoi(c.QueryParam("approver_id"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid approver ID")
+		}
+		filters["approver_id"] = uint(approverID)
+	}
+
+	result, err := ex.ExpenseRequestsService.GetAnalytics(filters)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
 // CreateExpenseRequest creates a new expense request
 // @Summary Create a new expense request
 // @Description Create a new expense request
@@ -292,6 +334,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
+	filterReq.ApproverID = uint(i)
 	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), &filterReq)
 	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{

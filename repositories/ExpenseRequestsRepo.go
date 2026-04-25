@@ -37,8 +37,12 @@ func applyFilters(db *gorm.DB, filter *dtos.ExpenseRequestFilterDTO) *gorm.DB {
 	if filter == nil {
 		return db
 	}
-	if filter.Date != "" {
-		db = db.Where("DATE(expense_requests.date_submitted) = ?", filter.Date)
+	if filter.StartDate != "" && filter.EndDate != "" {
+		db = db.Where("DATE(expense_requests.date_submitted) BETWEEN ? AND ?", filter.StartDate, filter.EndDate)
+	} else if filter.StartDate != "" {
+		db = db.Where("DATE(expense_requests.date_submitted) >= ?", filter.StartDate)
+	} else if filter.EndDate != "" {
+		db = db.Where("DATE(expense_requests.date_submitted) <= ?", filter.EndDate)
 	}
 	if filter.Search != "" {
 		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id").
@@ -56,10 +60,6 @@ func applyFilters(db *gorm.DB, filter *dtos.ExpenseRequestFilterDTO) *gorm.DB {
 	if filter.MaxAmount != nil {
 		db = db.Where("expense_requests.amount <= ?", *filter.MaxAmount)
 	}
-	if filter.ApprovedByMe && filter.ApproverID != 0 {
-		db = db.Joins("JOIN expense_approvals filter_ea ON filter_ea.request_id = expense_requests.id").
-			Where("filter_ea.approver_id = ? AND filter_ea.status = 'approved'", filter.ApproverID)
-	}
 	return db
 }
 
@@ -69,36 +69,34 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 
 	db := r.db.Model(&models.ExpenseRequests{})
 
-	if filter != nil && filter.Status != "" {
-		if filter.Status == "pending" {
-			// Admin Pending: only their own pending requests (their turn)
-			db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-				Where("expense_approvals.approver_id = ?", approverID).
-				Where("expense_requests.status = 'pending'").
-				Where("expense_approvals.level = expense_requests.current_approver_level")
-		} else if filter.Status == "approved" {
-			// Admin Approved: every approved request 
-			db = db.Where("expense_requests.status = 'approved'")
-		} else if filter.Status == "rejected" {
-			// Admin Rejected: every rejected request, except ones that didn't reach admin's level
-			db = db.Joins("LEFT JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id AND expense_approvals.approver_id = ?", approverID).
-				Where("expense_requests.status = 'rejected'").
-				Where("(expense_approvals.id IS NULL OR expense_approvals.level <= expense_requests.current_approver_level)")
-		}
+	if filter != nil && filter.NeedMyApproval {
+		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+			Where("expense_approvals.approver_id = ?", approverID).
+			Where("expense_requests.status = 'pending'").
+			Where("expense_approvals.level = expense_requests.current_approver_level")
 	} else {
-		// Admin All: every approved + every rejected + only their pending
-		db = db.Joins("LEFT JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id AND expense_approvals.approver_id = ?", approverID).
-			Where(`(
-				expense_requests.status = 'approved'
-				OR expense_requests.status = 'rejected'
-				OR (expense_requests.status = 'pending' AND expense_approvals.id IS NOT NULL AND expense_approvals.level = expense_requests.current_approver_level)
-			)`)
+		if filter != nil && filter.IncludedAsApprover {
+			db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+				Where("expense_approvals.approver_id = ?", approverID)
+		}
+
+		if filter != nil && filter.Status != "" {
+			db = db.Where("expense_requests.status = ?", filter.Status)
+		} else if filter == nil || !filter.IncludedAsApprover {
+			// Admin All: every approved + every rejected + all pending
+			db = db.Where(`(
+					expense_requests.status = 'approved'
+					OR expense_requests.status = 'rejected'
+					OR (expense_requests.status = 'pending')
+				)`)
+		}
 	}
 
 	db = applyFilters(db, filter)
-	db.Count(&total)
+	db.Session(&gorm.Session{}).Count(&total)
 
-	db.Preload("Projects").Preload("GLAccounts").
+	db.Session(&gorm.Session{}).
+		Preload("Projects").Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id, name, email, role_id, department_id")
@@ -349,7 +347,7 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 
 func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicy models.ApprovalPolicies
-	err := r.db.Where(
+	err := tx.Where(
 		"(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount AND (gl_account_id = ? OR gl_account_id IS NULL)",
 		departmentID, request.Project, request.Amount, request.GLAccount,
 	).Order("gl_account_id IS NULL ASC").First(&approvalPolicy).Error
@@ -366,29 +364,29 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dto
 		Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
 		Where("expense_approvals.approver_id = ?", id)
 
-	if filter != nil && filter.Status != "" {
+	if filter != nil && filter.NeedMyApproval {
+		db = db.Where("expense_requests.status = 'pending'").
+			Where("expense_approvals.level = expense_requests.current_approver_level")
+	} else if filter != nil && filter.Status != "" {
 		db = db.Where("expense_requests.status = ?", filter.Status)
-		if filter.Status == "pending" {
-			// Pending: only if it's the approver's turn
-			db = db.Where("expense_approvals.level = expense_requests.current_approver_level")
-		} else if filter.Status == "rejected" {
-			// Rejected: only if approver's level was reached
+		if filter.Status == "rejected" {
 			db = db.Where("expense_approvals.level <= expense_requests.current_approver_level")
 		}
-		// Approved: no level restriction — any approver part of the flow can see
+		// Pending: show all in chain, no level restriction
+		// Approved: show all in chain, no level restriction
 	} else {
-		// All: union of pending (their turn) + approved (part of flow) + rejected (level reached)
 		db = db.Where(`(
-			(expense_requests.status = 'pending' AND expense_approvals.level = expense_requests.current_approver_level)
+			(expense_requests.status = 'pending')
 			OR (expense_requests.status = 'approved')
 			OR (expense_requests.status = 'rejected' AND expense_approvals.level <= expense_requests.current_approver_level)
 		)`)
 	}
 
 	db = applyFilters(db, filter)
-	db.Count(&total)
+	db.Session(&gorm.Session{}).Count(&total)
 
-	db.Preload("Projects").
+	db.Session(&gorm.Session{}).
+		Preload("Projects").
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Approvals").

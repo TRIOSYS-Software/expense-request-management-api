@@ -292,6 +292,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
+	filterReq.ApproverID = uint(i)
 	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), &filterReq)
 	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{

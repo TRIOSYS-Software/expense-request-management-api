@@ -8,11 +8,10 @@ type ApprovalPolicies struct {
 	MaxAmount    float64                 `json:"max_amount" gorm:"not null"`
 	Project      string                  `json:"project" gorm:"type:VARCHAR;size:20;not null"`
 	DepartmentID *uint                   `json:"department" gorm:"nullable"`
-	GLAccountID  *string                 `json:"gl_account_id" gorm:"nullable"`
 	CreatedAt    time.Time               `json:"created_at" gorm:"autoCreateTime;not null"`
 	UpdatedAt    time.Time               `json:"updated_at" gorm:"autoUpdateTime;not null"`
 	PolicyUsers  []ApprovalPoliciesUsers `json:"policy_users,omitempty" gorm:"foreignKey:ApprovalPolicyID;references:ID"`
 	Departments  Departments             `json:"departments,omitempty" gorm:"foreignKey:DepartmentID;references:ID"`
 	Projects     Project                 `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
-	GLAccounts   GLAcc                   `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccountID;references:DOCKEY"`
+	GLAccounts   []GLAcc                 `json:"gl_accounts,omitempty" gorm:"many2many:approval_policy_gl_accounts;foreignKey:ID;joinForeignKey:ApprovalPolicyID;References:DOCKEY;joinReferences:GLAccountDockey"`
 }

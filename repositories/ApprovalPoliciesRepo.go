@@ -60,9 +60,9 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 		DepartmentID: approvalPolicyDTO.DepartmentID,
 	}
 
-	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID) {
+	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID, approvalPolicyDTO.GLAccountIDs, nil) {
 		tx.Rollback()
-		return fmt.Errorf("You cannot create a policy for an existing amount range.")
+		return fmt.Errorf("You cannot create a policy for an existing amount range with overlapping GL accounts.")
 	}
 
 	if err := tx.Create(&approvalPolicy).Error; err != nil {
@@ -97,7 +97,7 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 	return tx.Commit().Error
 }
 
-func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, departmentID *uint) bool {
+func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, departmentID *uint, glAccountIDs []string, excludeID *uint) bool {
 	var count int64
 
 	query := db.Model(&models.ApprovalPolicies{}).
@@ -108,6 +108,31 @@ func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, ma
 		query = query.Where("department_id = ?", departmentID)
 	} else {
 		query = query.Where("department_id IS NULL")
+	}
+
+	if excludeID != nil {
+		query = query.Where("id != ?", *excludeID)
+	}
+
+	// Only flag overlap when they share at least one GL account
+	if len(glAccountIDs) > 0 {
+		var dkeys []int
+		for _, idStr := range glAccountIDs {
+			dk, err := strconv.Atoi(idStr)
+			if err != nil {
+				continue
+			}
+			dkeys = append(dkeys, dk)
+		}
+		if len(dkeys) > 0 {
+			query = query.Where("EXISTS (SELECT 1 FROM approval_policy_gl_accounts apga WHERE apga.approval_policy_id = approval_policies.id AND apga.gl_account_dockey IN (?))", dkeys)
+		} else {
+			// No valid GL account IDs — no GL overlap possible
+			return false
+		}
+	} else {
+		// New policy has no GL accounts; only overlap with policies that also have no GL accounts
+		query = query.Where("NOT EXISTS (SELECT 1 FROM approval_policy_gl_accounts apga WHERE apga.approval_policy_id = approval_policies.id)")
 	}
 
 	if err := query.Count(&count).Error; err != nil {
@@ -125,11 +150,17 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *
 		tx.Rollback()
 		return err
 	}
-
+	
 	approvalPoliciesToUpdate.MinAmount = approvalPolicyDTO.MinAmount
 	approvalPoliciesToUpdate.MaxAmount = approvalPolicyDTO.MaxAmount
 	approvalPoliciesToUpdate.Project = approvalPolicyDTO.Project
 	approvalPoliciesToUpdate.DepartmentID = approvalPolicyDTO.DepartmentID
+
+	excludeID := approvalPoliciesToUpdate.ID
+	if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID, approvalPolicyDTO.GLAccountIDs, &excludeID) {
+		tx.Rollback()
+		return fmt.Errorf("You cannot update to an amount range that overlaps with an existing policy with the same GL accounts.")
+	}
 
 	if err := tx.Save(&approvalPoliciesToUpdate).Error; err != nil {
 		tx.Rollback()

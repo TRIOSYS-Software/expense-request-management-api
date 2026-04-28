@@ -123,7 +123,7 @@ func (u *UsersService) ChangePassword(id uint, request *dtos.ChangePasswordReque
 		return err
 	}
 	if !helper.CheckPasswordHash(request.OldPassword, user.Password) {
-		return fmt.Errorf("invalid old password")
+		return fmt.Errorf("Invalid old password")
 	}
 	hashPassword, err := helper.HashPassword(request.NewPassword)
 	if err != nil {

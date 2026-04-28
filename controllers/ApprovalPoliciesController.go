@@ -20,7 +20,7 @@ func NewApprovalPoliciesController(approvalPoliciesService *services.ApprovalPol
 func (u *ApprovalPoliciesController) GetApprovalPolicies(c echo.Context) error {
 	approvalPolicies, err := u.approvalPoliciesService.GetApprovalPolicies()
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, approvalPolicies)
 }
@@ -29,11 +29,11 @@ func (u *ApprovalPoliciesController) GetApprovalPolicyByID(c echo.Context) error
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid approval policy id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid approval policy id"})
 	}
 	approvalPolicy, err := u.approvalPoliciesService.GetApprovalPolicyByID(uint(i))
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, approvalPolicy)
 }
@@ -41,11 +41,11 @@ func (u *ApprovalPoliciesController) GetApprovalPolicyByID(c echo.Context) error
 func (u *ApprovalPoliciesController) CreateApprovalPolicy(c echo.Context) error {
 	approvalPolicyDTO := new(dtos.ApprovalPolicyRequestDTO)
 	if err := c.Bind(approvalPolicyDTO); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 
 	if err := u.approvalPoliciesService.CreateApprovalPolicy(approvalPolicyDTO); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, approvalPolicyDTO)
 }
@@ -53,14 +53,14 @@ func (u *ApprovalPoliciesController) CreateApprovalPolicy(c echo.Context) error 
 func (u *ApprovalPoliciesController) UpdateApprovalPolicy(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid approval policy id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid approval policy id"})
 	}
 	approvalPolicyDTO := new(dtos.ApprovalPolicyRequestDTO)
 	if err := c.Bind(approvalPolicyDTO); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.approvalPoliciesService.UpdateApprovalPolicy(uint(id), approvalPolicyDTO); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, approvalPolicyDTO)
 }
@@ -69,10 +69,10 @@ func (u *ApprovalPoliciesController) DeleteApprovalPolicy(c echo.Context) error 
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid approval policy id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid approval policy id"})
 	}
 	if err := u.approvalPoliciesService.DeleteApprovalPolicy(uint(i)); err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Approval policy deleted successfully")
 }

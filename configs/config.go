@@ -153,6 +153,7 @@ func (c *Config) InitializedDB() {
 		&models.Departments{},
 		&models.ExpenseCategories{},
 		&models.ApprovalPoliciesUsers{},
+		&models.ApprovalPolicyGLAccount{},
 		&models.PaymentMethod{},
 		&models.Project{},
 		&models.GLAcc{},
@@ -160,6 +161,8 @@ func (c *Config) InitializedDB() {
 		&models.Notification{},
 		&models.DeviceToken{},
 	)
+
+	c.DB.Exec("ALTER TABLE approval_policies DROP COLUMN IF EXISTS gl_account_id")
 
 	if err := SeedPermissions(c.DB); err != nil {
 		log.Fatalf("Failed to seed permissions: %v", err)

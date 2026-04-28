@@ -32,7 +32,7 @@ func NewUsersController(usersService *services.UsersService) *UsersController {
 func (u *UsersController) GetUsers(c echo.Context) error {
 	users, err := u.UsersService.GetUsers()
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }
@@ -50,7 +50,7 @@ func (u *UsersController) GetUsers(c echo.Context) error {
 func (u *UsersController) GetAllUsers(c echo.Context) error {
 	users, err := u.UsersService.GetAllUsers()
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }
@@ -59,11 +59,11 @@ func (u *UsersController) GetUsersByRole(c echo.Context) error {
 	roleID := c.Param("role_id")
 	i, err := strconv.Atoi(roleID)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid role id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid role id"})
 	}
 	user, err := u.UsersService.GetUsersByRole(uint(i))
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, user)
 }
@@ -82,7 +82,7 @@ func (u *UsersController) GetUsersByRole(c echo.Context) error {
 func (u *UsersController) LoginUser(c echo.Context) error {
 	resquest := new(dtos.LoginRequestDTO)
 	if err := c.Bind(resquest); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	user := models.Users{
 		Email:    resquest.Email,
@@ -112,7 +112,7 @@ func (u *UsersController) LoginUser(c echo.Context) error {
 func (u *UsersController) CreateUser(c echo.Context) error {
 	request := new(dtos.UserRequestDTO)
 	if err := c.Bind(request); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	user := models.Users{
 		Name:         request.Name,
@@ -122,7 +122,7 @@ func (u *UsersController) CreateUser(c echo.Context) error {
 		DepartmentID: request.Department,
 	}
 	if err := u.UsersService.CreateUser(&user); err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, user)
 }
@@ -143,11 +143,11 @@ func (u *UsersController) GetUserByID(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid user id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	user, err := u.UsersService.GetUserByID(uint(i))
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, user)
 }
@@ -167,15 +167,15 @@ func (u *UsersController) GetUserByID(c echo.Context) error {
 func (u *UsersController) UpdateUser(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid user id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	user := new(models.Users)
 	user.ID = uint(id)
 	if err := c.Bind(user); err != nil {
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.UpdateUser(user); err != nil {
-		return c.JSON(http.StatusNotFound, err.Error())
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, user)
 }
@@ -195,10 +195,10 @@ func (u *UsersController) DeleteUser(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid user id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	if err := u.UsersService.DeleteUser(uint(i)); err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "User deleted successfully")
 }
@@ -218,7 +218,7 @@ func (u *UsersController) VerifyUser(c echo.Context) error {
 	user_id := c.Get("user_id")
 	user, err := u.UsersService.GetUserByID(uint(user_id.(float64)))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "invalid User!")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid User!"})
 	}
 	return c.JSON(http.StatusOK, user)
 }
@@ -238,11 +238,11 @@ func (u *UsersController) SetPaymentMethodsToUser(c echo.Context) error {
 	userPaymentMethodDTO := new(dtos.UserPaymentMethodDTO)
 	if err := c.Bind(userPaymentMethodDTO); err != nil {
 		log.Printf("Error binding payment methods to user: %v", err)
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.SetPaymentMethodsToUser(userPaymentMethodDTO); err != nil {
 		log.Printf("Error setting payment methods to user: %v", err)
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Payment methods set successfully")
 }
@@ -261,7 +261,7 @@ func (u *UsersController) GetUsersWithPaymentMethods(c echo.Context) error {
 	users, err := u.UsersService.GetUsersWithPaymentMethods()
 	if err != nil {
 		log.Printf("Error getting users with payment methods: %v", err)
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }
@@ -282,12 +282,12 @@ func (u *UsersController) GetPaymentMethodsByUserID(ctx echo.Context) error {
 	userID := ctx.Param("id")
 	id, err := strconv.Atoi(userID)
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, "Invalid user id")
+		return ctx.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	paymentMethods, err := u.UsersService.GetUserPaymentMethods(uint(id))
 	if err != nil {
 		log.Println(err)
-		return ctx.JSON(http.StatusNotFound, err)
+		return ctx.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return ctx.JSON(http.StatusOK, paymentMethods)
 }
@@ -307,11 +307,11 @@ func (u *UsersController) SetGLAccountsToUser(c echo.Context) error {
 	userGLAccountDTO := new(dtos.UserGLAccountDTO)
 	if err := c.Bind(userGLAccountDTO); err != nil {
 		log.Printf("Error binding GLAccounts to user: %v", err)
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.SetGLAccountsToUser(userGLAccountDTO); err != nil {
 		log.Printf("Error setting GLAccounts to user: %v", err)
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "GLAccounts set successfully")
 }
@@ -332,12 +332,12 @@ func (u *UsersController) GetGLAccountsByUserID(ctx echo.Context) error {
 	userID := ctx.Param("id")
 	id, err := strconv.Atoi(userID)
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, "Invalid user id")
+		return ctx.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	GLAccounts, err := u.UsersService.GetUserGLAccounts(uint(id))
 	if err != nil {
 		log.Println(err)
-		return ctx.JSON(http.StatusNotFound, err)
+		return ctx.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return ctx.JSON(http.StatusOK, GLAccounts)
 }
@@ -356,7 +356,7 @@ func (u *UsersController) GetUsersWithGLAccounts(c echo.Context) error {
 	users, err := u.UsersService.GetUsersWithGLAccounts()
 	if err != nil {
 		log.Printf("Error getting users with GLAccounts: %v", err)
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }
@@ -382,11 +382,11 @@ func (u *UsersController) ChangePassword(c echo.Context) error {
 	request := new(dtos.ChangePasswordRequestDTO)
 	if err := c.Bind(request); err != nil {
 		log.Printf("Error binding change password request: %v", err.Error())
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.ChangePassword(uint(id), request); err != nil {
 		log.Printf("Error changing password: %v", err.Error())
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Password changed successfully")
 }
@@ -407,11 +407,11 @@ func (u *UsersController) ForgotPassword(c echo.Context) error {
 	request := new(dtos.PasswordResetRequestDTO)
 	if err := c.Bind(request); err != nil {
 		log.Printf("Error binding forget password request: %v", err.Error())
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.ForgotPassword(request); err != nil {
 		log.Printf("Error forgot password: %v", err.Error())
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "Password reset link sent successfully"})
 }
@@ -432,7 +432,7 @@ func (u *UsersController) ValidatePasswordResetToken(c echo.Context) error {
 	token := new(dtos.PasswordResetTokenDTO)
 	if err := c.Bind(token); err != nil {
 		log.Printf("Error binding password reset token: %v", err.Error())
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.ValidatePasswordResetToken(*token); err != nil {
 		log.Printf("Error validating password reset token: %v", err.Error())
@@ -457,11 +457,11 @@ func (u *UsersController) ResetPassword(c echo.Context) error {
 	request := new(dtos.PasswordResetChangeRequestDTO)
 	if err := c.Bind(request); err != nil {
 		log.Printf("Error binding forget password change request: %v", err.Error())
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.ResetPassword(request); err != nil {
 		log.Printf("Error forgot password change: %v", err.Error())
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
 }
@@ -482,11 +482,11 @@ func (u *UsersController) SetProjectsToUser(c echo.Context) error {
 	userProjectDTO := new(dtos.UserProjectDTO)
 	if err := c.Bind(userProjectDTO); err != nil {
 		log.Printf("Error binding projects to user: %v", err)
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	if err := u.UsersService.SetProjectsToUser(userProjectDTO); err != nil {
 		log.Printf("Error setting projects to user: %v", err)
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Projects set successfully")
 }
@@ -507,12 +507,12 @@ func (u *UsersController) GetProjectsByUserID(ctx echo.Context) error {
 	userID := ctx.Param("id")
 	id, err := strconv.Atoi(userID)
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, "Invalid user id")
+		return ctx.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	projects, err := u.UsersService.GetUserProjects(uint(id))
 	if err != nil {
 		log.Println(err)
-		return ctx.JSON(http.StatusNotFound, err)
+		return ctx.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return ctx.JSON(http.StatusOK, projects)
 }
@@ -532,7 +532,7 @@ func (u *UsersController) GetUsersWithProjects(c echo.Context) error {
 	users, err := u.UsersService.GetUsersWithProjects()
 	if err != nil {
 		log.Printf("Error getting users with projects: %v", err)
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }

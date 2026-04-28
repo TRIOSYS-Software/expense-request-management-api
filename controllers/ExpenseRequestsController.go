@@ -61,11 +61,11 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	expenseRequest, err := ex.ExpenseRequestsService.GetExpenseRequestByID(uint(i))
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
 }
@@ -86,7 +86,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid user id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	var filterReq dtos.ExpenseRequestFilterDTO
 	if err := c.Bind(&filterReq); err != nil {
@@ -166,9 +166,51 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) e
 
 	summary, err := ex.ExpenseRequestsService.GetExpenseRequestsSummary(filters)
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, summary)
+}
+
+func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
+	filters := make(map[string]any)
+
+	if c.QueryParam("start_date") != "" {
+		startDate, err := time.Parse("2006-01-02", c.QueryParam("start_date"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid start date")
+		}
+		filters["start_date"] = startDate
+	}
+
+	if c.QueryParam("end_date") != "" {
+		endDate, err := time.Parse("2006-01-02", c.QueryParam("end_date"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid end date")
+		}
+		filters["end_date"] = endDate
+	}
+
+	if c.QueryParam("user_id") != "" {
+		userID, err := strconv.Atoi(c.QueryParam("user_id"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid user ID")
+		}
+		filters["user_id"] = uint(userID)
+	}
+
+	if c.QueryParam("approver_id") != "" {
+		approverID, err := strconv.Atoi(c.QueryParam("approver_id"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid approver ID")
+		}
+		filters["approver_id"] = uint(approverID)
+	}
+
+	result, err := ex.ExpenseRequestsService.GetAnalytics(filters)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
+	}
+	return c.JSON(http.StatusOK, result)
 }
 
 // CreateExpenseRequest creates a new expense request
@@ -186,7 +228,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) e
 func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error {
 	expenseRequest := new(models.ExpenseRequests)
 	if err := c.Bind(expenseRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	file, err := c.FormFile("attachment")
 	if err == nil {
@@ -265,7 +307,7 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 			dstPath := filepath.Join(ex.UploadDir, att.FilePath)
 			os.Remove(dstPath)
 		}
-		return c.JSON(http.StatusNotFound, err.Error())
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
 }
@@ -292,6 +334,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
+	filterReq.ApproverID = uint(i)
 	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), &filterReq)
 	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
@@ -315,10 +358,10 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	if err := ex.ExpenseRequestsService.SendExpenseRequestToSQLACC(uint(id)); err != nil {
-		return c.JSON(http.StatusNotFound, err.Error())
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Expense request sent to SQLACC successfully")
 }
@@ -339,11 +382,11 @@ func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) 
 func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	expenseRequest := new(models.ExpenseRequests)
 	if err := c.Bind(expenseRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 
 	file, err := c.FormFile("attachment")
@@ -427,7 +470,7 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 	}
 
 	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
 }
@@ -447,10 +490,10 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	if err := ex.ExpenseRequestsService.DeleteExpenseRequest(uint(id)); err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Expense request deleted successfully")
 }

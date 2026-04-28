@@ -38,7 +38,7 @@ func FetchAllProjects() ([]models.Project, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch project: %s", resp.Status)
+		return nil, fmt.Errorf("Failed to fetch project: %s", resp.Status)
 	}
 
 	var projects []models.Project

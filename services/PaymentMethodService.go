@@ -38,7 +38,7 @@ func FetchAllPaymentMethods() ([]models.PaymentMethod, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch payment methods: %s", resp.Status)
+		return nil, fmt.Errorf("Failed to fetch payment methods: %s", resp.Status)
 	}
 
 	var paymentMethods []models.PaymentMethod

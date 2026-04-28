@@ -62,7 +62,7 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 
 	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID) {
 		tx.Rollback()
-		return fmt.Errorf("amount range overlapping")
+		return fmt.Errorf("You cannot create a policy for an existing amount range.")
 	}
 
 	if err := tx.Create(&approvalPolicy).Error; err != nil {

@@ -27,7 +27,7 @@ func (con *ExpenseApprovalsController) GetExpenseApprovalsByApproverID(c echo.Co
 	approverID := c.Param("approver_id")
 	id, err := strconv.Atoi(approverID)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	ExpenseApprovals := con.ExpenseApprovalsService.GetExpenseApprovalsByApproverID(uint(id))
 	return c.JSON(200, &ExpenseApprovals)
@@ -50,15 +50,15 @@ func (con *ExpenseApprovalsController) UpdateExpenseApproval(c echo.Context) err
 	id := c.Param("id")
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	ExpenseApprovals := new(models.ExpenseApprovals)
 	if err := c.Bind(ExpenseApprovals); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	fmt.Println(ExpenseApprovals)
 	if err := con.ExpenseApprovalsService.UpdateExpenseApproval(uint(idInt), ExpenseApprovals); err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, ExpenseApprovals)
 }
@@ -83,19 +83,19 @@ type UpdateExpenseApprovalCommentDTO struct {
 func (con *ExpenseApprovalsController) UpdateExpenseApprovalComment(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 
 	var dto UpdateExpenseApprovalCommentDTO
 	if err := c.Bind(&dto); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 
 	if err := con.ExpenseApprovalsService.UpdateExpenseApprovalComment(
 		uint(id),
 		dto.Comments,
 	); err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{

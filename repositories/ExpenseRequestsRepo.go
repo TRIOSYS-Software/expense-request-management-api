@@ -232,14 +232,14 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 	if err != nil {
 		tx.Rollback()
 		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("requesting user with ID %d not found", expenseRequest.UserID)
+			return fmt.Errorf("User with ID %d not found", expenseRequest.UserID)
 		}
-		return fmt.Errorf("failed to retrieve requesting user: %w", err)
+		return fmt.Errorf("Failed to retrieve user: %w", err)
 	}
 
 	if requestUser.DepartmentID == nil {
 		tx.Rollback()
-		return fmt.Errorf("requesting user (ID %d - %s) has no department assigned", requestUser.ID, requestUser.Name)
+		return fmt.Errorf("User (ID %d - %s) has no department assigned", requestUser.ID, requestUser.Name)
 	}
 
 	// Safely get user's role name, as Roles is a *Roles
@@ -260,12 +260,12 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 	var approvalPoliciesUsers []models.ApprovalPoliciesUsers
 	if err := tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to retrieve approver users: %w", err)
+		return fmt.Errorf("Failed to retrieve approver users: %w", err)
 	}
 
 	if len(approvalPoliciesUsers) == 0 {
 		tx.Rollback()
-		return fmt.Errorf("no approver users found")
+		return fmt.Errorf("No approver users found")
 	}
 
 	type pendingNotification struct {
@@ -362,7 +362,7 @@ func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.Exp
 		departmentID, request.Project, request.Amount, request.GLAccount,
 	).Order("NOT EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id) ASC").First(&approvalPolicy).Error
 	if err != nil {
-		return nil, fmt.Errorf("no approval policy found")
+		return nil, fmt.Errorf("No approval policy found")
 	}
 	return &approvalPolicy, nil
 }
@@ -507,7 +507,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 
 		if len(approvalPoliciesUsers) == 0 {
 			tx.Rollback()
-			return fmt.Errorf("no approver users found")
+			return fmt.Errorf("No approver users found")
 		}
 
 		for i, approverPolicyUser := range approvalPoliciesUsers {

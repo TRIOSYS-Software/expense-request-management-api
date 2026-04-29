@@ -61,11 +61,11 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	expenseRequest, err := ex.ExpenseRequestsService.GetExpenseRequestByID(uint(i))
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
 }
@@ -86,7 +86,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid user id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid user id"})
 	}
 	var filterReq dtos.ExpenseRequestFilterDTO
 	if err := c.Bind(&filterReq); err != nil {
@@ -166,7 +166,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) e
 
 	summary, err := ex.ExpenseRequestsService.GetExpenseRequestsSummary(filters)
 	if err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, summary)
 }
@@ -208,7 +208,7 @@ func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
 
 	result, err := ex.ExpenseRequestsService.GetAnalytics(filters)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -228,7 +228,7 @@ func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
 func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error {
 	expenseRequest := new(models.ExpenseRequests)
 	if err := c.Bind(expenseRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	file, err := c.FormFile("attachment")
 	if err == nil {
@@ -307,7 +307,7 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 			dstPath := filepath.Join(ex.UploadDir, att.FilePath)
 			os.Remove(dstPath)
 		}
-		return c.JSON(http.StatusNotFound, err.Error())
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
 }
@@ -358,10 +358,10 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	if err := ex.ExpenseRequestsService.SendExpenseRequestToSQLACC(uint(id)); err != nil {
-		return c.JSON(http.StatusNotFound, err.Error())
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Expense request sent to SQLACC successfully")
 }
@@ -382,11 +382,11 @@ func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) 
 func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	expenseRequest := new(models.ExpenseRequests)
 	if err := c.Bind(expenseRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 
 	file, err := c.FormFile("attachment")
@@ -470,7 +470,7 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 	}
 
 	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
 }
@@ -490,10 +490,10 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid expense request id")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
 	if err := ex.ExpenseRequestsService.DeleteExpenseRequest(uint(id)); err != nil {
-		return c.JSON(http.StatusNotFound, err)
+		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Expense request deleted successfully")
 }

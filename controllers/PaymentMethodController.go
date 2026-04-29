@@ -30,7 +30,7 @@ func (c *PaymentMethodController) SyncPaymentMethods(ctx echo.Context) error {
 	err := c.paymentMethodService.SyncPaymentMethods()
 	if err != nil {
 		log.Println(err)
-		return ctx.JSON(http.StatusInternalServerError, err.Error())
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return ctx.JSON(http.StatusOK, "Payment methods synced successfully")
 }
@@ -49,7 +49,7 @@ func (c *PaymentMethodController) GetPaymentMethods(ctx echo.Context) error {
 	paymentMethods, err := c.paymentMethodService.GetPaymentMethods()
 	if err != nil {
 		log.Println(err)
-		return ctx.JSON(http.StatusNotFound, err)
+		return ctx.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return ctx.JSON(http.StatusOK, paymentMethods)
 }

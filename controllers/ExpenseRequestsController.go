@@ -119,20 +119,18 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 // @Security JWT Token
 func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) error {
 	filters := make(map[string]any)
-	if c.QueryParam("start_date") != "" {
-		startDate, err := time.Parse("2006-01-02", c.QueryParam("start_date"))
-		if err != nil {
+	if s := c.QueryParam("start_date"); s != "" {
+		if _, err := time.Parse("2006-01-02", s); err != nil {
 			return c.JSON(http.StatusBadRequest, "Invalid start date")
 		}
-		filters["start_date"] = startDate
+		filters["start_date"] = s
 	}
 
-	if c.QueryParam("end_date") != "" {
-		endDate, err := time.Parse("2006-01-02", c.QueryParam("end_date"))
-		if err != nil {
+	if s := c.QueryParam("end_date"); s != "" {
+		if _, err := time.Parse("2006-01-02", s); err != nil {
 			return c.JSON(http.StatusBadRequest, "Invalid end date")
 		}
-		filters["end_date"] = endDate
+		filters["end_date"] = s
 	}
 
 	if c.QueryParam("category_id") != "" {
@@ -174,20 +172,18 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) e
 func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
 	filters := make(map[string]any)
 
-	if c.QueryParam("start_date") != "" {
-		startDate, err := time.Parse("2006-01-02", c.QueryParam("start_date"))
-		if err != nil {
+	if s := c.QueryParam("start_date"); s != "" {
+		if _, err := time.Parse("2006-01-02", s); err != nil {
 			return c.JSON(http.StatusBadRequest, "Invalid start date")
 		}
-		filters["start_date"] = startDate
+		filters["start_date"] = s
 	}
 
-	if c.QueryParam("end_date") != "" {
-		endDate, err := time.Parse("2006-01-02", c.QueryParam("end_date"))
-		if err != nil {
+	if s := c.QueryParam("end_date"); s != "" {
+		if _, err := time.Parse("2006-01-02", s); err != nil {
 			return c.JSON(http.StatusBadRequest, "Invalid end date")
 		}
-		filters["end_date"] = endDate
+		filters["end_date"] = s
 	}
 
 	if c.QueryParam("user_id") != "" {

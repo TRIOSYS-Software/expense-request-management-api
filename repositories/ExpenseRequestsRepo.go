@@ -105,6 +105,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 		Preload("Approvals.Users.Roles").Preload("Approvals.Users.Departments").
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Attachments").
+		Preload("AdvanceRequest").
 		Order("expense_requests.created_at DESC").
 		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&expenseRequests)
@@ -121,6 +122,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByID(id uint) (*models.ExpenseReq
 		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Attachments").
+		Preload("AdvanceRequest").
 		First(&expenseRequest, id).Error
 	return &expenseRequest, err
 }
@@ -146,6 +148,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, filter *dtos.E
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Preload("Attachments").
+		Preload("AdvanceRequest").
 		Order("expense_requests.created_at DESC").
 		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&expenseRequests)
@@ -221,6 +224,11 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 			log.Printf("PANIC recovered in CreateExpenseRequest: %v", rec)
 		}
 	}()
+
+	if err := validateAdvanceRequestLink(tx, expenseRequest, nil); err != nil {
+		tx.Rollback()
+		return err
+	}
 
 	if err := tx.Create(expenseRequest).Error; err != nil {
 		tx.Rollback()
@@ -355,10 +363,49 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 	return nil
 }
 
+// validateAdvanceRequestLink enforces the ER↔AR coupling rules at create/update time:
+//   - linked AR must exist, belong to the same user, and be status='approved'
+//   - ER.amount must not exceed AR.amount
+//   - no other ER may currently link the same AR with status in ('pending','approved')
+//
+// excludeID, when non-nil, skips that ER ID during the duplicate-link check (used by Update).
+func validateAdvanceRequestLink(tx *gorm.DB, request *models.ExpenseRequests, excludeID *uint) error {
+	if request.AdvanceRequestID == nil {
+		return nil
+	}
+	var ar models.AdvanceRequests
+	if err := tx.First(&ar, *request.AdvanceRequestID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("Linked advance request not found")
+		}
+		return fmt.Errorf("Failed to load linked advance request: %w", err)
+	}
+	if ar.UserID != request.UserID {
+		return fmt.Errorf("You may only link an advance request created by yourself")
+	}
+	if ar.Status != "approved" {
+		return fmt.Errorf("Only an approved advance request may be linked")
+	}
+
+	q := tx.Model(&models.ExpenseRequests{}).
+		Where("advance_request_id = ? AND status IN ('pending','approved')", *request.AdvanceRequestID)
+	if excludeID != nil {
+		q = q.Where("id <> ?", *excludeID)
+	}
+	var dupCount int64
+	if err := q.Count(&dupCount).Error; err != nil {
+		return fmt.Errorf("Failed to validate advance request availability: %w", err)
+	}
+	if dupCount > 0 {
+		return fmt.Errorf("This advance request is already linked to another active expense request")
+	}
+	return nil
+}
+
 func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
 	var approvalPolicy models.ApprovalPolicies
 	err := tx.Where(
-		"(department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount AND (NOT EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id) OR EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id AND gl_account_dockey = CAST(? AS UNSIGNED)))",
+		"policy_type = 'expense' AND (department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount AND (NOT EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id) OR EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id AND gl_account_dockey = CAST(? AS UNSIGNED)))",
 		departmentID, request.Project, request.Amount, request.GLAccount,
 	).Order("NOT EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id) ASC").First(&approvalPolicy).Error
 	if err != nil {
@@ -407,6 +454,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dto
 			return db.Select("id, name, email")
 		}).
 		Preload("Attachments").
+		Preload("AdvanceRequest").
 		Order("expense_requests.created_at DESC").
 		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&expenseRequests)
@@ -422,10 +470,19 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		return err
 	}
 
+	// Carry forward UserID from the existing row for validation (form may omit it on update).
+	expenseRequest.UserID = old_expenseRequest.UserID
+	excludeID := old_expenseRequest.ID
+	if err := validateAdvanceRequestLink(tx, expenseRequest, &excludeID); err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	old_expenseRequest.IsSendToSQLACC = expenseRequest.IsSendToSQLACC
 	old_expenseRequest.Description = expenseRequest.Description
 	old_expenseRequest.PaymentMethod = expenseRequest.PaymentMethod
 	old_expenseRequest.GLAccount = expenseRequest.GLAccount
+	old_expenseRequest.AdvanceRequestID = expenseRequest.AdvanceRequestID
 
 	// Handle Legacy Attachment Retention
 	if old_expenseRequest.Attachment != nil {

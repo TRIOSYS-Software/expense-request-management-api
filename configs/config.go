@@ -148,6 +148,9 @@ func (c *Config) InitializedDB() {
 		&models.ExpenseItems{},
 		&models.ApprovalPolicies{},
 		&models.ExpenseApprovals{},
+		&models.AdvanceRequests{},
+		&models.AdvanceRequestAttachments{},
+		&models.AdvanceApprovals{},
 		&models.Roles{},
 		&models.Permissions{},
 		&models.Departments{},
@@ -163,6 +166,9 @@ func (c *Config) InitializedDB() {
 	)
 
 	c.DB.Exec("ALTER TABLE approval_policies DROP COLUMN IF EXISTS gl_account_id")
+
+	// Backfill: legacy approval_policies rows have NULL/empty policy_type — pin to 'expense'.
+	c.DB.Exec("UPDATE approval_policies SET policy_type = 'expense' WHERE policy_type IS NULL OR policy_type = ''")
 
 	if err := SeedPermissions(c.DB); err != nil {
 		log.Fatalf("Failed to seed permissions: %v", err)
@@ -226,6 +232,15 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Expense Request", Entity: "expense-request", Action: "reject", ActionName: "Reject Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "send-to-sqlacc", ActionName: "Send To SQL Account"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "export", ActionName: "Export Expense Requests"},
+
+		// Advance Request
+		{Name: "Advance Request", Entity: "advance-request", Action: "view", ActionName: "View Advance Requests"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "create", ActionName: "Create Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "update", ActionName: "Update Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "delete", ActionName: "Delete Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "approve", ActionName: "Approve Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "reject", ActionName: "Reject Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "export", ActionName: "Export Advance Requests"},
 
 		// User
 		{Name: "User", Entity: "user", Action: "view", ActionName: "View Users"},

@@ -198,7 +198,7 @@ func (r *ExpenseApprovalsRepo) sendSingleNotification(
 			"expenseId": fmt.Sprintf("%d", expenseID),
 			"type":      notificationType,
 		}
-		r.notificationRepo.SendPushNotification(tokens, "Expense Request", message, data)
+		go r.notificationRepo.SendPushNotification(tokens, "Expense Request", message, data)
 	}
 
 	go utilities.SendWebSocketMessage(

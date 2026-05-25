@@ -18,7 +18,11 @@ func NewApprovalPoliciesController(approvalPoliciesService *services.ApprovalPol
 }
 
 func (u *ApprovalPoliciesController) GetApprovalPolicies(c echo.Context) error {
-	approvalPolicies, err := u.approvalPoliciesService.GetApprovalPolicies()
+	policyType := c.QueryParam("policy_type")
+	if policyType != "" && policyType != "expense" && policyType != "advance" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid policy_type"})
+	}
+	approvalPolicies, err := u.approvalPoliciesService.GetApprovalPolicies(policyType)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}

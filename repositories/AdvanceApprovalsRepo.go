@@ -159,7 +159,7 @@ func (r *AdvanceApprovalsRepo) sendSingleNotification(
 			"advanceId": fmt.Sprintf("%d", advanceID),
 			"type":      notificationType,
 		}
-		r.notificationRepo.SendPushNotification(tokens, "Advance Request", message, data)
+		go r.notificationRepo.SendPushNotification(tokens, "Advance Request", message, data)
 	}
 
 	go utilities.SendWebSocketMessage(

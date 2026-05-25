@@ -113,6 +113,7 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestByID(id uint) (*models.AdvanceReq
 		Preload("Approvals.Users", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Attachments").
+		Preload("ExpenseRequest").
 		First(&advanceRequest, id).Error
 	return &advanceRequest, err
 }

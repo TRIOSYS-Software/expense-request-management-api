@@ -14,8 +14,8 @@ func NewApprovalPoliciesService(repo *repositories.ApprovalPoliciesRepo) *Approv
 	return &ApprovalPoliciesService{repo: repo}
 }
 
-func (s *ApprovalPoliciesService) GetApprovalPolicies() ([]models.ApprovalPolicies, error) {
-	return s.repo.GetApprovalPolicies()
+func (s *ApprovalPoliciesService) GetApprovalPolicies(policyType string) ([]models.ApprovalPolicies, error) {
+	return s.repo.GetApprovalPolicies(policyType)
 }
 
 func (s *ApprovalPoliciesService) GetApprovalPolicyByID(id uint) (*models.ApprovalPolicies, error) {

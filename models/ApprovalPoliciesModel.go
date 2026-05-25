@@ -4,6 +4,7 @@ import "time"
 
 type ApprovalPolicies struct {
 	ID           uint                    `json:"id" gorm:"primaryKey;autoIncrement;unique"`
+	PolicyType   string                  `json:"policy_type" gorm:"type:enum('expense','advance');not null;default:'expense';index"`
 	MinAmount    float64                 `json:"min_amount" gorm:"not null"`
 	MaxAmount    float64                 `json:"max_amount" gorm:"not null"`
 	Project      string                  `json:"project" gorm:"type:VARCHAR;size:20;not null"`

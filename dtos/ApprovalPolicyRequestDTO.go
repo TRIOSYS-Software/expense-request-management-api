@@ -6,6 +6,7 @@ type ApproverInput struct {
 }
 
 type ApprovalPolicyRequestDTO struct {
+	PolicyType   string          `json:"policy_type"`
 	MinAmount    float64         `json:"min_amount"`
 	MaxAmount    float64         `json:"max_amount"`
 	Project      string          `json:"project"`

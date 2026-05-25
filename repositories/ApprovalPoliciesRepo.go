@@ -17,14 +17,17 @@ func NewApprovalPoliciesRepo(db *gorm.DB) *ApprovalPoliciesRepo {
 	return &ApprovalPoliciesRepo{db: db}
 }
 
-func (a *ApprovalPoliciesRepo) GetApprovalPolicies() ([]models.ApprovalPolicies, error) {
+func (a *ApprovalPoliciesRepo) GetApprovalPolicies(policyType string) ([]models.ApprovalPolicies, error) {
 	var approvalPolicies []models.ApprovalPolicies
-	err := a.db.Preload("PolicyUsers", func(db *gorm.DB) *gorm.DB { return db.Order("level ASC") }).
+	q := a.db.Preload("PolicyUsers", func(db *gorm.DB) *gorm.DB { return db.Order("level ASC") }).
 		Preload("PolicyUsers.Approver", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Departments").
 		Preload("Projects").
-		Preload("GLAccounts").
-		Find(&approvalPolicies).Error
+		Preload("GLAccounts")
+	if policyType != "" {
+		q = q.Where("policy_type = ?", policyType)
+	}
+	err := q.Find(&approvalPolicies).Error
 	return approvalPolicies, err
 }
 
@@ -53,14 +56,24 @@ func glAccsFromIDs(ids []string) []models.GLAcc {
 func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.ApprovalPolicyRequestDTO) error {
 	tx := a.db.Begin()
 
+	policyType := approvalPolicyDTO.PolicyType
+	if policyType == "" {
+		policyType = "expense"
+	}
+	if policyType != "expense" && policyType != "advance" {
+		tx.Rollback()
+		return fmt.Errorf("Invalid policy_type: must be 'expense' or 'advance'")
+	}
+
 	approvalPolicy := models.ApprovalPolicies{
+		PolicyType:   policyType,
 		MinAmount:    approvalPolicyDTO.MinAmount,
 		MaxAmount:    approvalPolicyDTO.MaxAmount,
 		Project:      approvalPolicyDTO.Project,
 		DepartmentID: approvalPolicyDTO.DepartmentID,
 	}
 
-	if IsAmountRangeOverlapping(tx, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID, approvalPolicyDTO.GLAccountIDs, nil) {
+	if IsAmountRangeOverlapping(tx, policyType, approvalPolicy.Project, approvalPolicy.MinAmount, approvalPolicy.MaxAmount, approvalPolicy.DepartmentID, approvalPolicyDTO.GLAccountIDs, nil) {
 		tx.Rollback()
 		return fmt.Errorf("You cannot create a policy for an existing amount range with overlapping GL accounts.")
 	}
@@ -97,10 +110,15 @@ func (a *ApprovalPoliciesRepo) CreateApprovalPolicy(approvalPolicyDTO *dtos.Appr
 	return tx.Commit().Error
 }
 
-func IsAmountRangeOverlapping(db *gorm.DB, project string, minAmount float64, maxAmount float64, departmentID *uint, glAccountIDs []string, excludeID *uint) bool {
+func IsAmountRangeOverlapping(db *gorm.DB, policyType string, project string, minAmount float64, maxAmount float64, departmentID *uint, glAccountIDs []string, excludeID *uint) bool {
 	var count int64
 
+	if policyType == "" {
+		policyType = "expense"
+	}
+
 	query := db.Model(&models.ApprovalPolicies{}).
+		Where("policy_type = ?", policyType).
 		Where("project = ?", project).
 		Where("NOT (max_amount < ? OR min_amount > ?)", minAmount, maxAmount)
 
@@ -150,14 +168,26 @@ func (a *ApprovalPoliciesRepo) UpdateApprovalPolicy(id uint, approvalPolicyDTO *
 		tx.Rollback()
 		return err
 	}
-	
+
+	policyType := approvalPolicyDTO.PolicyType
+	if policyType == "" {
+		policyType = approvalPoliciesToUpdate.PolicyType
+	}
+	if policyType == "" {
+		policyType = "expense"
+	}
+	if policyType != "expense" && policyType != "advance" {
+		tx.Rollback()
+		return fmt.Errorf("Invalid policy_type: must be 'expense' or 'advance'")
+	}
+	approvalPoliciesToUpdate.PolicyType = policyType
 	approvalPoliciesToUpdate.MinAmount = approvalPolicyDTO.MinAmount
 	approvalPoliciesToUpdate.MaxAmount = approvalPolicyDTO.MaxAmount
 	approvalPoliciesToUpdate.Project = approvalPolicyDTO.Project
 	approvalPoliciesToUpdate.DepartmentID = approvalPolicyDTO.DepartmentID
 
 	excludeID := approvalPoliciesToUpdate.ID
-	if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID, approvalPolicyDTO.GLAccountIDs, &excludeID) {
+	if IsAmountRangeOverlapping(tx, approvalPoliciesToUpdate.PolicyType, approvalPoliciesToUpdate.Project, approvalPoliciesToUpdate.MinAmount, approvalPoliciesToUpdate.MaxAmount, approvalPoliciesToUpdate.DepartmentID, approvalPolicyDTO.GLAccountIDs, &excludeID) {
 		tx.Rollback()
 		return fmt.Errorf("You cannot update to an amount range that overlaps with an existing policy with the same GL accounts.")
 	}

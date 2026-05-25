@@ -22,6 +22,7 @@ type AdvanceRequests struct {
 	Projects             Project                     `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
 	GLAccounts           GLAcc                       `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY"`
 	Attachments          []AdvanceRequestAttachments `json:"attachments,omitempty" gorm:"foreignKey:AdvanceRequestID"`
+	ExpenseRequest       *ExpenseRequests            `json:"expense_request,omitempty" gorm:"foreignKey:AdvanceRequestID"`
 	KeptAttachmentIDs    []uint                      `json:"kept_attachment_ids,omitempty" form:"kept_attachment_ids" gorm:"-"`
 	KeepLegacyAttachment bool                        `json:"keep_legacy_attachment,omitempty" form:"keep_legacy_attachment" gorm:"-"`
 }

@@ -190,7 +190,7 @@ func (c *Config) InitializedDB() {
 	c.DB.Where("name = ?", "Admin").First(&adminRole)
 
 	var allPerms []models.Permissions
-	c.DB.Not("entity = ? AND action = ?", "expense-request", "create").Find(&allPerms)
+	c.DB.Where("NOT (entity IN ? AND action = ?)", []string{"expense-request", "advance-request"}, "create").Find(&allPerms)
 
 	if err := c.DB.Model(&adminRole).Association("Permissions").Replace(allPerms); err != nil {
 		log.Fatalf("Failed to assign permissions to Admin: %v", err)

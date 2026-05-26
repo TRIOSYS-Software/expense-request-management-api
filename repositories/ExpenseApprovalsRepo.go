@@ -64,6 +64,19 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 		return err
 	}
 
+	if expenseRequest.Status != "pending" {
+		tx.Rollback()
+		return errors.New("this expense request has already been finalized; please refresh")
+	}
+	if expenseApprovalToUpdate.Status != "pending" {
+		tx.Rollback()
+		return errors.New("this approval has already been processed; please refresh")
+	}
+	if expenseApprovalToUpdate.Level != expenseRequest.CurrentApproverLevel {
+		tx.Rollback()
+		return errors.New("this request has already advanced past your level; please refresh")
+	}
+
 	originalRequestCreatorID := expenseRequest.UserID
 	originalRequestCreatorName := expenseRequest.User.Name
 	expenseDescription := expenseRequest.Description

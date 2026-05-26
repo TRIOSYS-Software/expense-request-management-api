@@ -23,6 +23,8 @@ func InitialRoute(e *echo.Echo, db *gorm.DB, firebaseApp *firebase.App) {
 	initExpenseCategoriesRoutes(apiV1, db)
 	initExpenseRequestsRoutes(apiV1, db, firebaseApp)
 	initExpenseApprovalsRoutes(apiV1, db, firebaseApp)
+	initAdvanceRequestsRoutes(apiV1, db, firebaseApp)
+	initAdvanceApprovalsRoutes(apiV1, db, firebaseApp)
 	initNotificationRoutes(apiV1, db, firebaseApp)
 	initPaymentMethodsRoutes(apiV1, db)
 	initProjectsRoutes(apiV1, db)
@@ -144,6 +146,32 @@ func initExpenseApprovalsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebas
 	e.PUT("/expense-approvals/:id", expenseApprovalsController.UpdateExpenseApproval, middlewares.IsAuthenticated)
 	e.GET("/expense-approvals", expenseApprovalsController.GetExpenseApprovals, middlewares.IsAuthenticated)
 	e.GET("/expense-approvals/approver/:approver_id", expenseApprovalsController.GetExpenseApprovalsByApproverID, middlewares.IsAuthenticated)
+}
+
+func initAdvanceRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {
+	advanceRequestsRepo := repositories.NewAdvanceRequestsRepo(db, firebaseApp)
+	advanceRequestsService := services.NewAdvanceRequestsService(advanceRequestsRepo)
+	advanceRequestsController := controllers.NewAdvanceRequestsController(advanceRequestsService)
+	e.GET("/advance-requests", advanceRequestsController.GetAdvanceRequests, middlewares.IsAuthenticated)
+	e.POST("/advance-requests", advanceRequestsController.CreateAdvanceRequest, middlewares.IsAuthenticated)
+	e.PUT("/advance-requests/:id", advanceRequestsController.UpdateAdvanceRequest, middlewares.IsAuthenticated)
+	e.GET("/advance-requests/selectable", advanceRequestsController.GetSelectableAdvanceRequests, middlewares.IsAuthenticated)
+	e.GET("/advance-requests/summary", advanceRequestsController.GetAdvanceRequestsSummary, middlewares.IsAuthenticated)
+	e.GET("/advance-requests/:id", advanceRequestsController.GetAdvanceRequestByID, middlewares.IsAuthenticated)
+	e.GET("/advance-requests/user/:id", advanceRequestsController.GetAdvanceRequestsByUserID, middlewares.IsAuthenticated)
+	e.GET("/advance-requests/approver/:id", advanceRequestsController.GetAdvanceRequestByApproverID, middlewares.IsAuthenticated)
+	e.DELETE("/advance-requests/:id", advanceRequestsController.DeleteAdvanceRequest, middlewares.IsAuthenticated)
+	e.GET("/advance-requests/attachment/:filename", advanceRequestsController.ServeAdvanceRequestAttachment)
+}
+
+func initAdvanceApprovalsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {
+	advanceApprovalsRepo := repositories.NewAdvanceApprovalsRepo(db, firebaseApp)
+	advanceApprovalsService := services.NewAdvanceApprovalsService(advanceApprovalsRepo)
+	advanceApprovalsController := controllers.NewAdvanceApprovalsController(advanceApprovalsService)
+	e.PUT("/advance-approvals/:id/comment", advanceApprovalsController.UpdateAdvanceApprovalComment, middlewares.IsAuthenticated)
+	e.PUT("/advance-approvals/:id", advanceApprovalsController.UpdateAdvanceApproval, middlewares.IsAuthenticated)
+	e.GET("/advance-approvals", advanceApprovalsController.GetAdvanceApprovals, middlewares.IsAuthenticated)
+	e.GET("/advance-approvals/approver/:approver_id", advanceApprovalsController.GetAdvanceApprovalsByApproverID, middlewares.IsAuthenticated)
 }
 
 func initNotificationRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {

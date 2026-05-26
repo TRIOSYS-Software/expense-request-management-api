@@ -144,6 +144,25 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 			)
 
 			r.sendSingleNotification(tx, originalRequestCreatorID, expenseRequest.ID, msg, "approved_final")
+
+			// If this ER is linked to an Advance Request, mark the AR as completed and notify.
+			if expenseRequest.AdvanceRequestID != nil {
+				var advance models.AdvanceRequests
+				if err := tx.First(&advance, *expenseRequest.AdvanceRequestID).Error; err == nil {
+					if advance.Status == "approved" {
+						advance.Status = "completed"
+						if err := tx.Save(&advance).Error; err != nil {
+							tx.Rollback()
+							return err
+						}
+						advanceMsg := fmt.Sprintf(
+							"Your advance request (#%d) has been COMPLETED via expense request #%d.",
+							advance.ID, expenseRequest.ID,
+						)
+						r.sendSingleNotification(tx, advance.UserID, advance.ID, advanceMsg, "advance_completed")
+					}
+				}
+			}
 		}
 	}
 
@@ -179,7 +198,7 @@ func (r *ExpenseApprovalsRepo) sendSingleNotification(
 			"expenseId": fmt.Sprintf("%d", expenseID),
 			"type":      notificationType,
 		}
-		r.notificationRepo.SendPushNotification(tokens, "Expense Request", message, data)
+		go r.notificationRepo.SendPushNotification(tokens, "Expense Request", message, data)
 	}
 
 	go utilities.SendWebSocketMessage(

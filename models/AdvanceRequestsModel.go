@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-type ExpenseRequests struct {
+type AdvanceRequests struct {
 	ID                   uint                        `json:"id,omitempty" gorm:"primaryKey;autoIncrement;unique"`
 	Amount               float64                     `json:"amount,omitempty" form:"amount" gorm:"not null"`
 	Description          string                      `json:"description,omitempty" form:"description" gorm:"not null"`
@@ -14,17 +14,15 @@ type ExpenseRequests struct {
 	Attachment           *string                     `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
 	CreatedAt            time.Time                   `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`
 	UpdatedAt            time.Time                   `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
-	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected');not null;default:'pending'"`
+	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected', 'completed');not null;default:'pending'"`
 	CurrentApproverLevel uint                        `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
-	IsSendToSQLACC       bool                        `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
-	AdvanceRequestID     *uint                       `json:"advance_request_id,omitempty" form:"advance_request_id" gorm:"nullable;index"`
-	Approvals            []ExpenseApprovals          `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
+	Approvals            []AdvanceApprovals          `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
 	User                 Users                       `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`
 	PaymentMethods       PaymentMethod               `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE"`
 	Projects             Project                     `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
 	GLAccounts           GLAcc                       `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY"`
-	Attachments          []ExpenseRequestAttachments `json:"attachments,omitempty" gorm:"foreignKey:ExpenseRequestID"`
-	AdvanceRequest       *AdvanceRequests            `json:"advance_request,omitempty" gorm:"foreignKey:AdvanceRequestID;references:ID"`
+	Attachments          []AdvanceRequestAttachments `json:"attachments,omitempty" gorm:"foreignKey:AdvanceRequestID"`
+	ExpenseRequest       *ExpenseRequests            `json:"expense_request,omitempty" gorm:"foreignKey:AdvanceRequestID"`
 	KeptAttachmentIDs    []uint                      `json:"kept_attachment_ids,omitempty" form:"kept_attachment_ids" gorm:"-"`
 	KeepLegacyAttachment bool                        `json:"keep_legacy_attachment,omitempty" form:"keep_legacy_attachment" gorm:"-"`
 }

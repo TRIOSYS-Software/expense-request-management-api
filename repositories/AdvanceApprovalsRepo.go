@@ -63,6 +63,19 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 		return err
 	}
 
+	if advanceRequest.Status != "pending" {
+		tx.Rollback()
+		return errors.New("this advance request has already been finalized; please refresh")
+	}
+	if toUpdate.Status != "pending" {
+		tx.Rollback()
+		return errors.New("this approval has already been processed; please refresh")
+	}
+	if toUpdate.Level != advanceRequest.CurrentApproverLevel {
+		tx.Rollback()
+		return errors.New("this request has already advanced past your level; please refresh")
+	}
+
 	originalRequestCreatorID := advanceRequest.UserID
 	originalRequestCreatorName := advanceRequest.User.Name
 	description := advanceRequest.Description

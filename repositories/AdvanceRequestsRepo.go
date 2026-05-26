@@ -272,11 +272,6 @@ func (r *AdvanceRequestsRepo) CreateAdvanceRequest(advanceRequest *models.Advanc
 		}
 	}()
 
-	if err := tx.Create(advanceRequest).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
 	var requestUser models.Users
 	err := tx.Preload("Roles").Preload("Departments").Where("id = ?", advanceRequest.UserID).First(&requestUser).Error
 	if err != nil {
@@ -314,6 +309,11 @@ func (r *AdvanceRequestsRepo) CreateAdvanceRequest(advanceRequest *models.Advanc
 	if len(approvalPoliciesUsers) == 0 {
 		tx.Rollback()
 		return fmt.Errorf("No approver users found")
+	}
+
+	if err := tx.Create(advanceRequest).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
 
 	type pendingNotification struct {

@@ -230,11 +230,6 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 		return err
 	}
 
-	if err := tx.Create(expenseRequest).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
 	var requestUser models.Users
 	err := tx.Preload("Roles").Preload("Departments").Where("id = ?", expenseRequest.UserID).First(&requestUser).Error
 	if err != nil {
@@ -274,6 +269,11 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 	if len(approvalPoliciesUsers) == 0 {
 		tx.Rollback()
 		return fmt.Errorf("No approver users found")
+	}
+
+	if err := tx.Create(expenseRequest).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
 
 	type pendingNotification struct {

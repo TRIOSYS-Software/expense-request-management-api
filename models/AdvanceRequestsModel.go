@@ -23,6 +23,9 @@ type AdvanceRequests struct {
 	GLAccounts           GLAcc                       `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY"`
 	Attachments          []AdvanceRequestAttachments `json:"attachments,omitempty" gorm:"foreignKey:AdvanceRequestID"`
 	ExpenseRequest       *ExpenseRequests            `json:"expense_request,omitempty" gorm:"foreignKey:AdvanceRequestID"`
+	ExpenseRequests      []ExpenseRequests           `json:"expense_requests,omitempty" gorm:"foreignKey:AdvanceRequestID"`
 	KeptAttachmentIDs    []uint                      `json:"kept_attachment_ids,omitempty" form:"kept_attachment_ids" gorm:"-"`
 	KeepLegacyAttachment bool                        `json:"keep_legacy_attachment,omitempty" form:"keep_legacy_attachment" gorm:"-"`
+	RemainingBalance     float64                     `json:"remaining_balance" gorm:"-"`
+	SettledAmount        float64                     `json:"settled_amount" gorm:"-"`
 }

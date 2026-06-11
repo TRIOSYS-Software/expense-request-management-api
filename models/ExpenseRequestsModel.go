@@ -18,6 +18,8 @@ type ExpenseRequests struct {
 	CurrentApproverLevel uint                        `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
 	IsSendToSQLACC       bool                        `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
 	AdvanceRequestID     *uint                       `json:"advance_request_id,omitempty" form:"advance_request_id" gorm:"nullable;index"`
+	AdvanceUsedAmount    *float64                    `json:"advance_used_amount,omitempty" form:"advance_used_amount" gorm:"nullable"`
+	ReturnedAmount       *float64                    `json:"returned_amount,omitempty" form:"returned_amount" gorm:"nullable"`
 	Approvals            []ExpenseApprovals          `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
 	User                 Users                       `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`
 	PaymentMethods       PaymentMethod               `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE"`

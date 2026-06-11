@@ -362,17 +362,30 @@ func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.Expens
 
 	return nil
 }
-
-// validateAdvanceRequestLink enforces the ER↔AR coupling rules at create/update time:
-//   - linked AR must exist, belong to the same user, and be status='approved'
-//   - ER.amount must not exceed AR.amount
-//   - no other ER may currently link the same AR with status in ('pending','approved')
-//
-// excludeID, when non-nil, skips that ER ID during the duplicate-link check (used by Update).
 func validateAdvanceRequestLink(tx *gorm.DB, request *models.ExpenseRequests, excludeID *uint) error {
+	if request.Amount < 0 {
+		return fmt.Errorf("Expense amount cannot be negative")
+	}
+
 	if request.AdvanceRequestID == nil {
+		request.AdvanceUsedAmount = nil
+		request.ReturnedAmount = nil
 		return nil
 	}
+
+	if request.AdvanceUsedAmount == nil || *request.AdvanceUsedAmount <= 0 {
+		return fmt.Errorf("Advance used amount is required and must be greater than zero when an advance request is linked")
+	}
+	used := *request.AdvanceUsedAmount
+
+	returned := 0.0
+	if request.ReturnedAmount != nil {
+		returned = *request.ReturnedAmount
+		if returned <= 0 {
+			return fmt.Errorf("Returned amount, when provided, must be greater than zero")
+		}
+	}
+
 	var ar models.AdvanceRequests
 	if err := tx.First(&ar, *request.AdvanceRequestID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -387,18 +400,22 @@ func validateAdvanceRequestLink(tx *gorm.DB, request *models.ExpenseRequests, ex
 		return fmt.Errorf("Only an approved advance request may be linked")
 	}
 
-	q := tx.Model(&models.ExpenseRequests{}).
-		Where("advance_request_id = ? AND status IN ('pending','approved')", *request.AdvanceRequestID)
-	if excludeID != nil {
-		q = q.Where("id <> ?", *excludeID)
+	remaining, err := advanceRemaining(tx, &ar, excludeID)
+	if err != nil {
+		return fmt.Errorf("Failed to compute advance request balance: %w", err)
 	}
-	var dupCount int64
-	if err := q.Count(&dupCount).Error; err != nil {
-		return fmt.Errorf("Failed to validate advance request availability: %w", err)
+	if used > remaining+balanceEpsilon {
+		return fmt.Errorf("Advance used amount (%.2f) exceeds the advance request's remaining balance (%.2f)", used, remaining)
 	}
-	if dupCount > 0 {
-		return fmt.Errorf("This advance request is already linked to another active expense request")
+
+	leftover := used - request.Amount
+	if leftover < 0 {
+		leftover = 0
 	}
+	if returned > leftover+balanceEpsilon {
+		return fmt.Errorf("Returned amount (%.2f) cannot exceed the unused portion of the advance used (%.2f)", returned, leftover)
+	}
+
 	return nil
 }
 
@@ -483,6 +500,8 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	old_expenseRequest.PaymentMethod = expenseRequest.PaymentMethod
 	old_expenseRequest.GLAccount = expenseRequest.GLAccount
 	old_expenseRequest.AdvanceRequestID = expenseRequest.AdvanceRequestID
+	old_expenseRequest.AdvanceUsedAmount = expenseRequest.AdvanceUsedAmount
+	old_expenseRequest.ReturnedAmount = expenseRequest.ReturnedAmount
 
 	// Handle Legacy Attachment Retention
 	if old_expenseRequest.Attachment != nil {

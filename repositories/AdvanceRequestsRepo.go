@@ -264,10 +264,6 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 	return summary, nil
 }
 
-// GetSelectableAdvanceRequests returns Approved ARs for the given user that still have a remaining
-// balance to draw against. Under the multi-use flow an AR stays selectable as long as its
-// reserved+settled consumption is below its amount; it drops off the list once fully consumed (and
-// is set to 'completed' on the approval that exhausts it). RemainingBalance is populated for the UI.
 func (r *AdvanceRequestsRepo) GetSelectableAdvanceRequests(userID uint) ([]models.AdvanceRequests, error) {
 	var advanceRequests []models.AdvanceRequests
 	err := r.db.

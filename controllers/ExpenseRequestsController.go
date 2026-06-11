@@ -11,6 +11,7 @@ import (
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -26,6 +27,18 @@ func NewExpenseRequestsController(expenseRequestsService *services.ExpenseReques
 		ExpenseRequestsService: expenseRequestsService,
 		UploadDir:              configs.Envs.UploadDir,
 	}
+}
+
+func parseOptionalFloat(c echo.Context, field string) *float64 {
+	raw := strings.TrimSpace(c.FormValue(field))
+	if raw == "" {
+		return nil
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return nil
+	}
+	return &v
 }
 
 func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
@@ -226,6 +239,8 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 	if err := c.Bind(expenseRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
+	expenseRequest.AdvanceUsedAmount = parseOptionalFloat(c, "advance_used_amount")
+	expenseRequest.ReturnedAmount = parseOptionalFloat(c, "returned_amount")
 	file, err := c.FormFile("attachment")
 	if err == nil {
 		src, err := file.Open()
@@ -384,6 +399,9 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 	if err := c.Bind(expenseRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
+	// Advance-settlement amounts are nullable; parse explicitly so blank fields stay NULL.
+	expenseRequest.AdvanceUsedAmount = parseOptionalFloat(c, "advance_used_amount")
+	expenseRequest.ReturnedAmount = parseOptionalFloat(c, "returned_amount")
 
 	file, err := c.FormFile("attachment")
 	if err == nil {

@@ -9,7 +9,7 @@ import (
 const balanceEpsilon = 1e-6
 
 const consumedSQL = `CASE
-		WHEN advance_used_amount IS NOT NULL
+		WHEN advance_used_amount IS NOT NULL AND advance_used_amount > 0
 			THEN LEAST(amount + COALESCE(returned_amount, 0), advance_used_amount)
 		ELSE amount
 	END`
@@ -86,4 +86,19 @@ func advanceFullySettled(db *gorm.DB, ar *models.AdvanceRequests) (bool, error) 
 		return false, err
 	}
 	return settled >= ar.Amount-balanceEpsilon, nil
+}
+
+func ReconcileAdvanceStatuses(db *gorm.DB) (int64, error) {
+	res := db.Exec(`
+		UPDATE advance_requests ar
+		SET ar.status = 'completed'
+		WHERE ar.status = 'approved'
+		  AND (
+			SELECT COALESCE(SUM(`+consumedSQL+`), 0)
+			FROM expense_requests
+			WHERE expense_requests.advance_request_id = ar.id
+			  AND expense_requests.status = 'approved'
+		  ) >= ar.amount - 0.000001
+	`)
+	return res.RowsAffected, res.Error
 }

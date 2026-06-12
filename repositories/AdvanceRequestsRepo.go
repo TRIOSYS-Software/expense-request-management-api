@@ -283,7 +283,9 @@ func (r *AdvanceRequestsRepo) GetSelectableAdvanceRequests(userID uint) ([]model
 		if err != nil {
 			return nil, err
 		}
-		if remaining > balanceEpsilon {
+		// advanceRemaining already snaps sub-1-Kyat dust to 0, so only advances with a real
+		// (≥ 1 Kyat) remainder remain selectable.
+		if remaining >= settledThreshold {
 			advanceRequests[i].RemainingBalance = remaining
 			selectable = append(selectable, advanceRequests[i])
 		}

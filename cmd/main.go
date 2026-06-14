@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"shwetaik-expense-management-api/configs"
+	"shwetaik-expense-management-api/repositories"
 	"shwetaik-expense-management-api/routes"
 
 	_ "shwetaik-expense-management-api/docs"
@@ -47,6 +48,12 @@ func main() {
 		e.Logger.Fatal(err)
 	}
 	cfg.InitializedDB()
+
+	if changed, err := repositories.ReconcileAdvanceStatuses(cfg.DB); err != nil {
+		e.Logger.Errorf("advance reconcile failed: %v", err)
+	} else if changed > 0 {
+		e.Logger.Infof("advance reconcile: completed %d advance(s)", changed)
+	}
 
 	if cfg.Environment == "dev" {
 		e.GET("/swagger/*", echoSwagger.WrapHandler)

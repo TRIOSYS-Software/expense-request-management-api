@@ -131,8 +131,6 @@ func (ac *AdvanceRequestsController) GetAdvanceRequestsSummary(c echo.Context) e
 	return c.JSON(http.StatusOK, summary)
 }
 
-// GetSelectableAdvanceRequests returns Approved ARs available to be linked to a new ER
-// for the given user. If no user_id query param is supplied, defaults to current user.
 func (ac *AdvanceRequestsController) GetSelectableAdvanceRequests(c echo.Context) error {
 	userID := uint(c.Get("user_id").(float64))
 	if uq := c.QueryParam("user_id"); uq != "" {

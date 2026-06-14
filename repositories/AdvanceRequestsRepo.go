@@ -101,6 +101,7 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequests(approverID uint, filter *dtos.A
 		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&advanceRequests)
 
+	_ = fillAdvanceBalances(r.db, advanceRequests)
 	return advanceRequests, total
 }
 
@@ -114,7 +115,18 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestByID(id uint) (*models.AdvanceReq
 		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id, name, email") }).
 		Preload("Attachments").
 		Preload("ExpenseRequest").
+		Preload("ExpenseRequests", func(db *gorm.DB) *gorm.DB {
+			return db.Order("expense_requests.created_at DESC")
+		}).
 		First(&advanceRequest, id).Error
+	if err != nil {
+		return &advanceRequest, err
+	}
+	single := []models.AdvanceRequests{advanceRequest}
+	if ferr := fillAdvanceBalances(r.db, single); ferr == nil {
+		advanceRequest.RemainingBalance = single[0].RemainingBalance
+		advanceRequest.SettledAmount = single[0].SettledAmount
+	}
 	return &advanceRequest, err
 }
 
@@ -141,6 +153,8 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsByUserID(id uint, filter *dtos.A
 		Order("advance_requests.created_at DESC").
 		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&advanceRequests)
+
+	_ = fillAdvanceBalances(r.db, advanceRequests)
 	return advanceRequests, total
 }
 
@@ -186,6 +200,8 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestByApproverID(id uint, filter *dto
 		Order("advance_requests.created_at DESC").
 		Offset(filter.Offset()).Limit(filter.Limit()).
 		Find(&advanceRequests)
+
+	_ = fillAdvanceBalances(r.db, advanceRequests)
 	return advanceRequests, total
 }
 
@@ -248,19 +264,33 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 	return summary, nil
 }
 
-// GetSelectableAdvanceRequests returns Approved ARs for the given user that have no
-// expense_requests currently linking them with status in ('pending','approved').
 func (r *AdvanceRequestsRepo) GetSelectableAdvanceRequests(userID uint) ([]models.AdvanceRequests, error) {
 	var advanceRequests []models.AdvanceRequests
 	err := r.db.
 		Where("user_id = ? AND status = 'approved'", userID).
-		Where("NOT EXISTS (SELECT 1 FROM expense_requests er WHERE er.advance_request_id = advance_requests.id AND er.status IN ('pending','approved'))").
 		Preload("Projects").
 		Preload("GLAccounts").
 		Preload("PaymentMethods", func(db *gorm.DB) *gorm.DB { return db.Select("CODE, DESCRIPTION") }).
 		Order("created_at DESC").
 		Find(&advanceRequests).Error
-	return advanceRequests, err
+	if err != nil {
+		return nil, err
+	}
+
+	selectable := make([]models.AdvanceRequests, 0, len(advanceRequests))
+	for i := range advanceRequests {
+		remaining, err := advanceRemaining(r.db, &advanceRequests[i], nil)
+		if err != nil {
+			return nil, err
+		}
+		// advanceRemaining already snaps sub-1-Kyat dust to 0, so only advances with a real
+		// (≥ 1 Kyat) remainder remain selectable.
+		if remaining >= settledThreshold {
+			advanceRequests[i].RemainingBalance = remaining
+			selectable = append(selectable, advanceRequests[i])
+		}
+	}
+	return selectable, nil
 }
 
 func (r *AdvanceRequestsRepo) CreateAdvanceRequest(advanceRequest *models.AdvanceRequests) error {
@@ -271,11 +301,6 @@ func (r *AdvanceRequestsRepo) CreateAdvanceRequest(advanceRequest *models.Advanc
 			log.Printf("PANIC recovered in CreateAdvanceRequest: %v", rec)
 		}
 	}()
-
-	if err := tx.Create(advanceRequest).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
 
 	var requestUser models.Users
 	err := tx.Preload("Roles").Preload("Departments").Where("id = ?", advanceRequest.UserID).First(&requestUser).Error
@@ -314,6 +339,11 @@ func (r *AdvanceRequestsRepo) CreateAdvanceRequest(advanceRequest *models.Advanc
 	if len(approvalPoliciesUsers) == 0 {
 		tx.Rollback()
 		return fmt.Errorf("No approver users found")
+	}
+
+	if err := tx.Create(advanceRequest).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
 
 	type pendingNotification struct {

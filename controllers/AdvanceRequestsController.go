@@ -124,6 +124,10 @@ func (ac *AdvanceRequestsController) GetAdvanceRequestsSummary(c echo.Context) e
 		filters["status"] = c.QueryParam("status")
 	}
 
+	if v, err := strconv.ParseBool(c.QueryParam("need_my_approval")); err == nil && v {
+		filters["need_my_approval"] = true
+	}
+
 	summary, err := ac.AdvanceRequestsService.GetAdvanceRequestsSummary(filters)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})

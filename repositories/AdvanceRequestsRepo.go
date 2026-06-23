@@ -209,8 +209,15 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 	var advanceRequests []models.AdvanceRequests
 	var summary dtos.AdvanceRequestSummary
 
-	db := r.db.Model(&models.AdvanceRequests{}).Preload("Approvals")
-	if filters["user_id"] != nil && filters["approver_id"] != nil {
+	db := r.db.Model(&models.AdvanceRequests{})
+	if filters["need_my_approval"] != nil && filters["approver_id"] != nil {
+		// Awaiting: items pending at the caller's approval level.
+		db = db.Joins("JOIN advance_approvals ON advance_approvals.request_id = advance_requests.id").
+			Where("advance_approvals.approver_id = ?", filters["approver_id"]).
+			Where("advance_requests.status = 'pending'").
+			Where("advance_approvals.level = advance_requests.current_approver_level").
+			Group("advance_requests.id")
+	} else if filters["user_id"] != nil && filters["approver_id"] != nil {
 		db = db.Joins("LEFT JOIN advance_approvals ON advance_approvals.request_id = advance_requests.id").
 			Where("(advance_requests.user_id = ? OR advance_approvals.approver_id = ?)", filters["user_id"], filters["approver_id"]).
 			Group("advance_requests.id")
@@ -232,18 +239,29 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 	}
 
 	db.Find(&advanceRequests)
+	_ = fillAdvanceBalances(r.db, advanceRequests)
+
+	arIDs := make([]uint, 0, len(advanceRequests))
+	for _, ar := range advanceRequests {
+		arIDs = append(arIDs, ar.ID)
+	}
 
 	for _, ar := range advanceRequests {
 		summary.TotalAmount = summary.TotalAmount + ar.Amount
 		switch ar.Status {
 		case "pending":
 			summary.Pending++
+			summary.PendingAmount += ar.Amount
 		case "approved":
 			summary.Approved++
+			summary.ApprovedAmount += ar.Amount
+			// Only approved advances contribute to outstanding remaining balance.
+			summary.RemainingAmount += ar.RemainingBalance
 		case "rejected":
 			summary.Rejected++
 		case "completed":
 			summary.Completed++
+			summary.CompletedAmount += ar.Amount
 		}
 
 		if filters["start_date"] != nil && filters["end_date"] != nil {
@@ -260,6 +278,19 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 			summary.DailyTotal[date] = entry
 		}
 	}
+
+	// "Settled" = explicitly returned portion across linked expenses (pending+approved ERs).
+	// Mirrors the same ER status filter used by the consumed/remaining computation.
+	if len(arIDs) > 0 {
+		var returned *float64
+		if err := r.db.Model(&models.ExpenseRequests{}).
+			Where("advance_request_id IN ? AND status IN ?", arIDs, []string{"pending", "approved"}).
+			Select("SUM(returned_amount)").
+			Scan(&returned).Error; err == nil && returned != nil {
+			summary.SettledAmount = *returned
+		}
+	}
+
 	summary.Total = len(advanceRequests)
 	return summary, nil
 }

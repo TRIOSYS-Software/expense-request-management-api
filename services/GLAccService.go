@@ -1,13 +1,22 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	helper "shwetaik-expense-management-api/Helper"
-	"shwetaik-expense-management-api/configs"
+	"log"
+	"net/url"
+	"strconv"
+	"time"
+
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
+	"shwetaik-expense-management-api/sqlacc"
+)
+
+const (
+	glAccountsPath   = "/account"
+	glAccSyncTimeout = 10 * time.Minute
 )
 
 type GLAccService struct {
@@ -22,60 +31,96 @@ func (s *GLAccService) GetGLAcc() ([]models.GLAcc, error) {
 	return s.Repo.GetGLAcc()
 }
 
-func FetchAllGLAcc() ([]models.GLAcc, error) {
-	uri := fmt.Sprintf("gl-accounts/codes?codes=%v", configs.Envs.FILTER_GL_CODES)
-	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, uri)
-	req, err := http.NewRequest("GET", api, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("ShweTaik", helper.GetToken(configs.Envs.SQLACC_API_PASSWORD, configs.Envs.SQLACC_API_KEY))
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Failed to fetch project: %s", resp.Status)
-	}
-
-	var GLAccs []models.GLAcc
-	err = json.NewDecoder(resp.Body).Decode(&GLAccs)
-	if err != nil {
-		return nil, err
-	}
-	return GLAccs, nil
+type glAccDTO struct {
+	DocKey         int    `json:"dockey"`
+	Parent         int    `json:"parent"`
+	Code           string `json:"code"`
+	Description    string `json:"description"`
+	Description2   string `json:"description2"`
+	AccType        string `json:"acctype"`
+	SpecialAccType string `json:"specialacctype"`
+	Tax            string `json:"tax"`
+	CashflowType   int    `json:"cashflowtype"`
+	SIC            string `json:"sic"`
 }
 
-func (s *GLAccService) DeleteGLAccs(glAccs []models.GLAcc) error {
-	oldGLAccs, err := s.Repo.GetGLAcc()
-	if err != nil {
-		return err
-	}
-	glAccMap := make(map[int]models.GLAcc, len(glAccs))
-	for _, newGLAcc := range glAccs {
-		glAccMap[newGLAcc.DOCKEY] = newGLAcc
-	}
-	for _, oldGLAcc := range oldGLAccs {
-		if _, ok := glAccMap[oldGLAcc.DOCKEY]; !ok {
-			if err := s.Repo.DeleteGLAcc(oldGLAcc); err != nil {
-				return err
-			}
+type glAccListEnvelope struct {
+	Data  []glAccDTO `json:"data"`
+	Count int        `json:"count"`
+}
+
+// FetchAllGLAcc pulls the entire chart of accounts from SQL Acc by paginating
+// /account with no code filter.
+func FetchAllGLAcc(ctx context.Context) ([]models.GLAcc, error) {
+	client := sqlacc.Default()
+	var all []models.GLAcc
+	offset := 0
+
+	for {
+		q := url.Values{}
+		q.Set("offset", strconv.Itoa(offset))
+		q.Set("limit", strconv.Itoa(pageSizeHint))
+
+		resp, err := client.Get(ctx, glAccountsPath, q)
+		if err != nil {
+			return nil, err
 		}
+		var env glAccListEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("decode gl-acc offset=%d: %w", offset, err)
+		}
+		resp.Body.Close()
+
+		if len(env.Data) == 0 {
+			break
+		}
+		for _, dto := range env.Data {
+			all = append(all, glAccFromDTO(dto))
+		}
+		offset += len(env.Data)
 	}
-	return nil
+	return all, nil
+}
+
+func glAccFromDTO(d glAccDTO) models.GLAcc {
+	return models.GLAcc{
+		DOCKEY:         d.DocKey,
+		PARENT:         d.Parent,
+		CODE:           d.Code,
+		DESCRIPTION:    d.Description,
+		DESCRIPTION2:   d.Description2,
+		ACCTYPE:        d.AccType,
+		SPECIALACCTYPE: d.SpecialAccType,
+		TAX:            d.Tax,
+		CASHFLOWTYPE:   d.CashflowType,
+		SIC:            d.SIC,
+	}
 }
 
 func (s *GLAccService) SyncGLAcc() error {
-	GLAccs, err := FetchAllGLAcc()
+	const tag = "[sync:gl-accounts]"
+	start := time.Now()
+	log.Printf("%s start", tag)
+
+	ctx, cancel := context.WithTimeout(context.Background(), glAccSyncTimeout)
+	defer cancel()
+
+	fetchStart := time.Now()
+	glAccs, err := FetchAllGLAcc(ctx)
 	if err != nil {
+		log.Printf("%s failed during fetch after %s: %v", tag, time.Since(start).Round(time.Millisecond), err)
 		return err
 	}
-	if err := s.DeleteGLAccs(GLAccs); err != nil {
+	log.Printf("%s fetch: %d rows in %s", tag, len(glAccs), time.Since(fetchStart).Round(time.Millisecond))
+
+	saveStart := time.Now()
+	counts, err := s.Repo.ReplaceGLAcc(glAccs)
+	if err != nil {
+		log.Printf("%s failed during save after %s: %v", tag, time.Since(start).Round(time.Millisecond), err)
 		return err
 	}
-	return s.Repo.SaveGLAcc(GLAccs)
+	log.Printf("%s save: upserted=%d deleted=%d in %s", tag, counts.Upserted, counts.Deleted, time.Since(saveStart).Round(time.Millisecond))
+	log.Printf("%s done in %s", tag, time.Since(start).Round(time.Millisecond))
+	return nil
 }

@@ -1,16 +1,18 @@
 package services
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	helper "shwetaik-expense-management-api/Helper"
-	"shwetaik-expense-management-api/configs"
+	"net/url"
+	"strings"
+	"time"
+
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
-	"strings"
+	"shwetaik-expense-management-api/sqlacc"
 )
 
 type ExpenseRequestsService struct {
@@ -58,66 +60,129 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 	if err != nil {
 		return err
 	}
-	if expenseRequest.Status == "approved" {
-		if err := callSQLACCAPI(expenseRequest, expenseRequest.PaymentMethods.DESCRIPTION); err != nil {
-			return err
-		}
-		if err := s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true); err != nil {
-			return err
-		}
+	if expenseRequest.Status != "approved" {
+		return nil
 	}
-	return nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if err := sendPaymentVoucher(ctx, expenseRequest); err != nil {
+		return err
+	}
+	return s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true)
 }
 
-func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string) error {
-	var docKey string
-	if strings.Contains(strings.ToLower(paymentMethod), "bank") {
-		docKey = fmt.Sprintf("APP-B-PV-%d", expenseRequest.ID)
-	} else {
-		docKey = fmt.Sprintf("APP-C-PV-%d", expenseRequest.ID)
+func paymentVoucherDocNo(expenseRequest *models.ExpenseRequests) string {
+	if strings.Contains(strings.ToLower(expenseRequest.PaymentMethods.DESCRIPTION), "bank") {
+		return fmt.Sprintf("APP-B-PV-%d", expenseRequest.ID)
 	}
-	data := map[string]any{
-		"DOCNO":         docKey,
-		"DOCTYPE":       "PV",
-		"DESCRIPTION":   expenseRequest.Description,
-		"PAYMENTMETHOD": expenseRequest.PaymentMethod,
-		"PROJECT":       expenseRequest.Project,
-		"DETAILS": []map[string]any{
-			{
-				"CODE":           expenseRequest.GLAccounts.CODE,
-				"DESCRIPTION":    expenseRequest.Description,
-				"PROJECT":        expenseRequest.Project,
-				"AMOUNT":         expenseRequest.Amount,
-				"LOCALAMOUNT":    expenseRequest.Amount,
-				"CURRENCYAMOUNT": expenseRequest.Amount,
-			},
-		},
+	return fmt.Sprintf("APP-C-PV-%d", expenseRequest.ID)
+}
+
+// paymentVoucherExists returns true if SQL Acc already has a PV with this
+// docno. The deterministic docno scheme (APP-{B|C}-PV-{id}) is our
+// idempotency key, so a retry after a flaky-network success doesn't double-post.
+func paymentVoucherExists(ctx context.Context, docno string) (bool, error) {
+	q := url.Values{}
+	q.Set("docno", docno)
+
+	resp, err := sqlacc.Default().Get(ctx, "/paymentvoucher", q)
+	if err != nil {
+		return false, err
 	}
-	jsonData, err := json.Marshal(data)
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("paymentvoucher precheck: status %d", resp.StatusCode)
+	}
+
+	var env struct {
+		Data  []map[string]any `json:"data"`
+		Count int              `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		return false, fmt.Errorf("paymentvoucher precheck decode: %w", err)
+	}
+	return len(env.Data) > 0, nil
+}
+
+func sendPaymentVoucher(ctx context.Context, er *models.ExpenseRequests) error {
+	docno := paymentVoucherDocNo(er)
+
+	exists, err := paymentVoucherExists(ctx, docno)
+	if err != nil {
+		return err
+	}
+	if exists {
+		// Already in SQL Acc — treat as success so the local flag flips
+		// without re-posting and creating a duplicate.
+		return nil
+	}
+
+	body, err := json.Marshal(buildPaymentVoucherPayload(er, docno))
 	if err != nil {
 		return err
 	}
 
-	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, "payments")
-
-	req, err := http.NewRequest("POST", api, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("ShweTaik", helper.GetToken(configs.Envs.SQLACC_API_PASSWORD, configs.Envs.SQLACC_API_KEY))
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := sqlacc.Default().Post(ctx, "/paymentvoucher", body)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("API call failed with status code: %d", resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("paymentvoucher POST failed: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// buildPaymentVoucherPayload maps an approved expense request to the SQL Acc
+// /paymentvoucher schema. Field selection mirrors the postman collection; the
+// numeric fields are sent as strings ("0.00") per the example body. Most
+// optional fields (irbm_*, eiv_*, address*, …) are left empty.
+//
+// NOTE: pending vendor confirmation of required fields. Values here are based
+// on the postman example and the local model.
+func buildPaymentVoucherPayload(er *models.ExpenseRequests, docno string) map[string]any {
+	today := time.Now().Format("2006-01-02")
+	amount := formatMoney(er.Amount)
+
+	detail := map[string]any{
+		"seq":            0,
+		"code":           er.GLAccounts.CODE,
+		"project":        er.Project,
+		"description":    er.Description,
+		"amount":         amount,
+		"localamount":    amount,
+		"currencyamount": amount,
+		"currencycode":   er.PaymentMethods.CURRENCYCODE,
+		"taxinclusive":   false,
+		"changed":        true,
 	}
 
-	return nil
+	return map[string]any{
+		"docno":         docno,
+		"doctype":       "PV",
+		"docdate":       today,
+		"postdate":      today,
+		"description":   er.Description,
+		"paymentmethod": er.PaymentMethod,
+		"project":       er.Project,
+		"currencycode":  er.PaymentMethods.CURRENCYCODE,
+		"docamt":        amount,
+		"localdocamt":   amount,
+		"cancelled":     false,
+		"changed":       true,
+		"sdsdocdetail":  []map[string]any{detail},
+	}
+}
+
+func formatMoney(v float64) string {
+	return fmt.Sprintf("%.2f", v)
 }
 
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {

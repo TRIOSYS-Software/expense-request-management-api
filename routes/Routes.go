@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"log"
 	"shwetaik-expense-management-api/controllers"
 	"shwetaik-expense-management-api/middlewares"
 	"shwetaik-expense-management-api/repositories"
@@ -194,12 +193,7 @@ func initPaymentMethodsRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/payment-methods", paymentMethodController.GetPaymentMethods, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "payment-method", "view-payment-methods"))
 
 	go func() {
-		err := paymentMethodService.SyncPaymentMethods()
-		if err != nil {
-			log.Println(err.Error())
-		} else {
-			log.Println("Payment methods synced successfully")
-		}
+		_ = paymentMethodService.SyncPaymentMethods()
 	}()
 }
 
@@ -211,12 +205,7 @@ func initProjectsRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/projects", projectController.GetProjects, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "project", "view-projects"))
 
 	go func() {
-		err := projectService.SyncProjects()
-		if err != nil {
-			log.Println(err.Error())
-		} else {
-			log.Println("Projects synced successfully")
-		}
+		_ = projectService.SyncProjects()
 	}()
 }
 
@@ -228,12 +217,7 @@ func initGLAccRoutes(e *echo.Group, db *gorm.DB) {
 	e.POST("/gl-acc/sync", glAccController.SyncGLAcc, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "gl-account", "sync-gl-accounts"))
 
 	go func() {
-		err := glAccService.SyncGLAcc()
-		if err != nil {
-			log.Println(err)
-		} else {
-			log.Println("GLAcc synced successfully")
-		}
+		_ = glAccService.SyncGLAcc()
 	}()
 }
 

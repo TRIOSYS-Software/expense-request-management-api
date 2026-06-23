@@ -28,10 +28,12 @@ type Config struct {
 	DBName              string
 	DB                  *gorm.DB
 	JWTSecret           string
-	SQLACC_API_PASSWORD string
-	SQLACC_API_KEY      string
 	SQLACC_API_URL      string
-	FILTER_GL_CODES     string
+	SQLACC_API_VERSION  string
+	SQLACC_API_REGION   string
+	SQLACC_API_SERVICE  string
+	SQLACC_ACCESS_KEY   string
+	SQLACC_SECRET_KEY   string
 	FRONTEND_URL        string
 	EMAIL_USERNAME      string
 	EMAIL_PASSWORD      string
@@ -67,10 +69,12 @@ func loadEnv(env string) *Config {
 	cfg.DBName = getEnvOrDefault("DB_NAME", "test")
 	cfg.DBPort = getEnvOrDefault("DB_PORT", "3306")
 	cfg.JWTSecret = getEnvOrDefault("JWT_SECRET", "")
-	cfg.SQLACC_API_PASSWORD = getEnvOrDefault("SQLACC_API_PASSWORD", "")
-	cfg.SQLACC_API_KEY = getEnvOrDefault("SQLACC_API_KEY", "")
-	cfg.SQLACC_API_URL = getEnvOrDefault("SQLACC_API_URL", "")
-	cfg.FILTER_GL_CODES = getEnvOrDefault("FILTER_GL_CODES", "")
+	cfg.SQLACC_API_URL = getEnvOrDefault("SQLACC_API_URL", "https://api.sql.my")
+	cfg.SQLACC_API_VERSION = getEnvOrDefault("SQLACC_API_VERSION", "v1.0")
+	cfg.SQLACC_API_REGION = getEnvOrDefault("SQLACC_API_REGION", "ap-southeast-5")
+	cfg.SQLACC_API_SERVICE = getEnvOrDefault("SQLACC_API_SERVICE", "sqlaccount")
+	cfg.SQLACC_ACCESS_KEY = getEnvOrDefault("SQLACC_ACCESS_KEY", "")
+	cfg.SQLACC_SECRET_KEY = getEnvOrDefault("SQLACC_SECRET_KEY", "")
 	cfg.FRONTEND_URL = getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
 	cfg.EMAIL_USERNAME = getEnvOrDefault("EMAIL_USERNAME", "")
 	cfg.EMAIL_PASSWORD = getEnvOrDefault("EMAIL_PASSWORD", "")

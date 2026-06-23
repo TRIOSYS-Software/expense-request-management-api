@@ -4,6 +4,7 @@ import (
 	"shwetaik-expense-management-api/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type GLAccRepo struct {
@@ -23,16 +24,39 @@ func (r *GLAccRepo) GetGLAcc() ([]models.GLAcc, error) {
 	return glAcc, nil
 }
 
-func (r *GLAccRepo) DeleteGLAcc(glAcc models.GLAcc) error {
-	return r.db.Delete(&glAcc).Error
-}
-
-func (r *GLAccRepo) SaveGLAcc(glAcc []models.GLAcc) error {
-	for _, acc := range glAcc {
-		err := r.db.Save(&acc).Error
-		if err != nil {
-			return err
+// ReplaceGLAcc upserts the supplied set and removes any locally cached rows
+// whose DOCKEY is not in the new set, all within one transaction so a
+// network or DB failure can't leave a half-synced chart of accounts.
+func (r *GLAccRepo) ReplaceGLAcc(glAccs []models.GLAcc) (SyncCounts, error) {
+	var counts SyncCounts
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		keep := make([]int, 0, len(glAccs))
+		for _, a := range glAccs {
+			keep = append(keep, a.DOCKEY)
 		}
-	}
-	return nil
+
+		del := tx.Where("DOCKEY NOT IN ?", keep)
+		if len(keep) == 0 {
+			del = tx.Where("1 = 1")
+		}
+		delRes := del.Delete(&models.GLAcc{})
+		if delRes.Error != nil {
+			return delRes.Error
+		}
+		counts.Deleted = delRes.RowsAffected
+
+		if len(glAccs) == 0 {
+			return nil
+		}
+		upRes := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "DOCKEY"}},
+			UpdateAll: true,
+		}).Create(&glAccs)
+		if upRes.Error != nil {
+			return upRes.Error
+		}
+		counts.Upserted = upRes.RowsAffected
+		return nil
+	})
+	return counts, err
 }

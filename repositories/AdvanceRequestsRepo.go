@@ -279,15 +279,15 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 		}
 	}
 
-	// "Settled" = explicitly returned portion across linked expenses (pending+approved ERs).
-	// Mirrors the same ER status filter used by the consumed/remaining computation.
+	// "Settled" = amount taken from these advances by approved expense requests
+	// (sum of advance_used_amount across approved linked ERs).
 	if len(arIDs) > 0 {
-		var returned *float64
+		var taken *float64
 		if err := r.db.Model(&models.ExpenseRequests{}).
-			Where("advance_request_id IN ? AND status IN ?", arIDs, []string{"pending", "approved"}).
-			Select("SUM(returned_amount)").
-			Scan(&returned).Error; err == nil && returned != nil {
-			summary.SettledAmount = *returned
+			Where("advance_request_id IN ? AND status = ?", arIDs, "approved").
+			Select("SUM(advance_used_amount)").
+			Scan(&taken).Error; err == nil && taken != nil {
+			summary.SettledAmount = *taken
 		}
 	}
 

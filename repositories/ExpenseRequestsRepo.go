@@ -159,8 +159,15 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 	var expenseRequests []models.ExpenseRequests
 	var summary dtos.ExpenseRequestSummary
 
-	db := r.db.Model(&models.ExpenseRequests{}).Preload("Approvals")
-	if filters["user_id"] != nil && filters["approver_id"] != nil {
+	db := r.db.Model(&models.ExpenseRequests{})
+	if filters["need_my_approval"] != nil && filters["approver_id"] != nil {
+		// Awaiting: items pending at the caller's approval level.
+		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
+			Where("expense_approvals.approver_id = ?", filters["approver_id"]).
+			Where("expense_requests.status = 'pending'").
+			Where("expense_approvals.level = expense_requests.current_approver_level").
+			Group("expense_requests.id")
+	} else if filters["user_id"] != nil && filters["approver_id"] != nil {
 		db = db.Joins("LEFT JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
 			Where("(expense_requests.user_id = ? OR expense_approvals.approver_id = ?)", filters["user_id"], filters["approver_id"]).
 			Group("expense_requests.id")
@@ -189,12 +196,20 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 
 	for _, expenseRequest := range expenseRequests {
 		summary.TotalAmount = summary.TotalAmount + expenseRequest.Amount
-		if expenseRequest.Status == "pending" {
-			summary.Pending = summary.Pending + 1
-		} else if expenseRequest.Status == "approved" {
-			summary.Approved = summary.Approved + 1
-		} else if expenseRequest.Status == "rejected" {
-			summary.Rejected = summary.Rejected + 1
+		switch expenseRequest.Status {
+		case "pending":
+			summary.Pending++
+			summary.PendingAmount += expenseRequest.Amount
+		case "approved":
+			summary.Approved++
+			summary.ApprovedAmount += expenseRequest.Amount
+		case "rejected":
+			summary.Rejected++
+		}
+
+		// "Total Advance Amount" — gross amount taken from advances by non-rejected expenses.
+		if expenseRequest.Status != "rejected" && expenseRequest.AdvanceUsedAmount != nil {
+			summary.AdvanceUsedAmount += *expenseRequest.AdvanceUsedAmount
 		}
 
 		if filters["start_date"] != nil && filters["end_date"] != nil {

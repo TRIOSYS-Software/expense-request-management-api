@@ -175,6 +175,10 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) e
 		filters["status"] = status
 	}
 
+	if v, err := strconv.ParseBool(c.QueryParam("need_my_approval")); err == nil && v {
+		filters["need_my_approval"] = true
+	}
+
 	summary, err := ex.ExpenseRequestsService.GetExpenseRequestsSummary(filters)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})

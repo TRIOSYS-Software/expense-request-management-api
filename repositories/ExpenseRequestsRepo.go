@@ -207,16 +207,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 			summary.Rejected++
 		}
 
-		// "Total Advance Amount" — net advance consumed by non-rejected expenses
-		// (advance_used minus what was settled back via returned_amount).
+		// "Total Advance Amount" — gross amount taken from advances by non-rejected expenses.
 		if expenseRequest.Status != "rejected" && expenseRequest.AdvanceUsedAmount != nil {
-			net := *expenseRequest.AdvanceUsedAmount
-			if expenseRequest.ReturnedAmount != nil {
-				net -= *expenseRequest.ReturnedAmount
-			}
-			if net > 0 {
-				summary.AdvanceUsedAmount += net
-			}
+			summary.AdvanceUsedAmount += *expenseRequest.AdvanceUsedAmount
 		}
 
 		if filters["start_date"] != nil && filters["end_date"] != nil {

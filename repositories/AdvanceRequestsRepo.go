@@ -238,6 +238,18 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 		summary.DailyTotal = make(map[string]dtos.DailyBreakdown)
 	}
 
+	if filters["search"] != nil {
+		search := filters["search"].(string)
+		db = db.Joins("LEFT JOIN users search_users ON search_users.id = advance_requests.user_id").
+			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = advance_requests.project")
+		pattern := "%" + search + "%"
+		if idVal, err := strconv.Atoi(search); err == nil {
+			db = db.Where("(advance_requests.id = ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, pattern, pattern, pattern)
+		} else {
+			db = db.Where("(search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", pattern, pattern, pattern)
+		}
+	}
+
 	db.Find(&advanceRequests)
 	_ = fillAdvanceBalances(r.db, advanceRequests)
 

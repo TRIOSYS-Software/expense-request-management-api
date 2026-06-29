@@ -192,6 +192,18 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 		db = db.Where("amount = ?", filters["amount"])
 	}
 
+	if filters["search"] != nil {
+		search := filters["search"].(string)
+		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id").
+			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = expense_requests.project")
+		pattern := "%" + search + "%"
+		if idVal, err := strconv.Atoi(search); err == nil {
+			db = db.Where("(expense_requests.id = ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, pattern, pattern, pattern)
+		} else {
+			db = db.Where("(search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", pattern, pattern, pattern)
+		}
+	}
+
 	db.Find(&expenseRequests)
 
 	for _, expenseRequest := range expenseRequests {

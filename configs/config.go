@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/models"
@@ -170,6 +171,27 @@ func (c *Config) InitializedDB() {
 	// Backfill: legacy approval_policies rows have NULL/empty policy_type — pin to 'expense'.
 	c.DB.Exec("UPDATE approval_policies SET policy_type = 'expense' WHERE policy_type IS NULL OR policy_type = ''")
 
+	// Extend advance_requests.status enum with 'closed' if the column is still on the old
+	// value set
+	var advanceStatusType string
+	c.DB.Raw(`
+		SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'advance_requests'
+		  AND COLUMN_NAME = 'status'
+	`).Scan(&advanceStatusType)
+	if advanceStatusType != "" && !strings.Contains(advanceStatusType, "'closed'") {
+		if err := c.DB.Exec(`
+			ALTER TABLE advance_requests
+			MODIFY COLUMN status ENUM('pending','approved','rejected','completed','closed')
+			NOT NULL DEFAULT 'pending'
+		`).Error; err != nil {
+			log.Printf("Failed to extend advance_requests.status enum: %v", err)
+		} else {
+			fmt.Println("✅ advance_requests.status enum extended with 'closed'")
+		}
+	}
+
 	if err := SeedPermissions(c.DB); err != nil {
 		log.Fatalf("Failed to seed permissions: %v", err)
 	}
@@ -240,6 +262,8 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Advance Request", Entity: "advance-request", Action: "delete", ActionName: "Delete Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "approve", ActionName: "Approve Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "reject", ActionName: "Reject Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "close", ActionName: "Manually Close Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "send-to-sqlacc", ActionName: "Send To SQL Account"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "export", ActionName: "Export Advance Requests"},
 
 		// User

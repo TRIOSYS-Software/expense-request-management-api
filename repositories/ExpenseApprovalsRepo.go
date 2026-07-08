@@ -94,6 +94,15 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 		return err
 	}
 
+	if err := r.notificationRepo.DeleteActionableForRequest(
+		tx,
+		expenseRequest.ID,
+		[]string{"new_request", "pending_approval"},
+	); err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	if expenseApproval.Status == "rejected" {
 		expenseRequest.Status = "rejected"
 		expenseRequest.CurrentApproverLevel = expenseApprovalToUpdate.Level
@@ -209,7 +218,7 @@ func (r *ExpenseApprovalsRepo) sendSingleNotification(
 		IsRead:    false,
 	}
 
-	_ = r.notificationRepo.CreateNotification(notification)
+	_ = tx.Create(notification).Error
 
 	tokens, err := r.deviceTokenRepo.GetTokensByUserID(userID)
 	if err == nil && len(tokens) > 0 {

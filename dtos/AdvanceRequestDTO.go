@@ -27,3 +27,7 @@ type AdvanceRequestFilterDTO struct {
 	MinAmount          *float64 `json:"min_amount" query:"min_amount"`
 	MaxAmount          *float64 `json:"max_amount" query:"max_amount"`
 }
+
+type CloseAdvanceRequestDTO struct {
+	Comment *string `json:"comment"`
+}

@@ -78,6 +78,15 @@ func (r *NotificationRepo) DeleteNotification(id uint) error {
 	return r.db.Delete(&models.Notification{}, id).Error
 }
 
+func (r *NotificationRepo) DeleteActionableForRequest(tx *gorm.DB, requestID uint, types []string) error {
+	db := r.db
+	if tx != nil {
+		db = tx
+	}
+	return db.Where("expense_id = ? AND type IN ?", requestID, types).
+		Delete(&models.Notification{}).Error
+}
+
 func (r *NotificationRepo) ClearAllNotifications(userID uint) error {
 	return r.db.Where("user_id = ?", userID).Delete(&models.Notification{}).Error
 }

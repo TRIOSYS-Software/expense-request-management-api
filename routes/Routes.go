@@ -161,6 +161,8 @@ func initAdvanceRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase
 	e.GET("/advance-requests/user/:id", advanceRequestsController.GetAdvanceRequestsByUserID, middlewares.IsAuthenticated)
 	e.GET("/advance-requests/approver/:id", advanceRequestsController.GetAdvanceRequestByApproverID, middlewares.IsAuthenticated)
 	e.DELETE("/advance-requests/:id", advanceRequestsController.DeleteAdvanceRequest, middlewares.IsAuthenticated)
+	e.PATCH("/advance-requests/:id/close", advanceRequestsController.CloseAdvanceRequest, middlewares.IsAuthenticated)
+	e.POST("/advance-requests/:id/send-to-sqlacc", advanceRequestsController.SendAdvanceRequestToSQLACC, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "advance-request", "send-to-sqlacc"))
 	e.GET("/advance-requests/attachment/:filename", advanceRequestsController.ServeAdvanceRequestAttachment)
 }
 

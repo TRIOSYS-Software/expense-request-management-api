@@ -15,6 +15,7 @@ import (
 	firebase "firebase.google.com/go/v4"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AdvanceRequestsRepo struct {
@@ -598,6 +599,107 @@ func (r *AdvanceRequestsRepo) UpdateAdvanceRequest(id uint, advanceRequest *mode
 	}
 
 	return tx.Commit().Error
+}
+
+func (r *AdvanceRequestsRepo) CloseAdvanceRequest(id uint, actorUserID uint, comment *string) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = tx.Rollback()
+			log.Printf("PANIC recovered in CloseAdvanceRequest: %v", rec)
+		}
+	}()
+
+	var ar models.AdvanceRequests
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("User").First(&ar, id).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	var actor models.Users
+	if err := tx.Preload("Roles").First(&actor, actorUserID).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	isAdmin := actor.Roles != nil && actor.Roles.IsAdmin
+	if !isAdmin && ar.UserID != actorUserID {
+		tx.Rollback()
+		return fmt.Errorf("Only the requester or an admin can close this advance request")
+	}
+
+	if ar.Status != "approved" {
+		tx.Rollback()
+		return fmt.Errorf("Only approved advance requests can be closed")
+	}
+
+	var pendingCount int64
+	if err := tx.Model(&models.ExpenseRequests{}).
+		Where("advance_request_id = ? AND status = ?", id, "pending").
+		Count(&pendingCount).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if pendingCount > 0 {
+		tx.Rollback()
+		return fmt.Errorf("Cannot close advance request: linked expense requests are still pending")
+	}
+
+	now := time.Now()
+	ar.Status = "closed"
+	ar.ClosureComment = comment
+	ar.ClosedByUserID = &actorUserID
+	ar.ClosedAt = &now
+
+	if err := tx.Save(&ar).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	// Notify the requester that their advance has been manually closed.
+	go func() {
+		msg := fmt.Sprintf(
+			"Your advance request (#%d - '%s') has been manually closed.",
+			ar.ID, ar.Description,
+		)
+		notification := &models.Notification{
+			UserID:    ar.UserID,
+			ExpenseID: ar.ID,
+			Message:   msg,
+			Type:      "advance_closed",
+			IsRead:    false,
+		}
+		if err := r.notificationRepo.CreateNotification(notification); err != nil {
+			log.Printf("Error saving close notification for user %d: %v", ar.UserID, err)
+		}
+
+		tokens, err := r.deviceTokenRepo.GetTokensByUserID(ar.UserID)
+		if err == nil && len(tokens) > 0 {
+			data := map[string]string{
+				"advanceId": fmt.Sprintf("%d", ar.ID),
+				"type":      "advance_closed",
+			}
+			r.notificationRepo.SendPushNotification(tokens, "Advance Request Closed", msg, data)
+		}
+
+		utilities.SendWebSocketMessage(
+			ar.UserID,
+			utilities.WebSocketMessagePayload{
+				ID:        notification.ID,
+				Message:   msg,
+				Type:      "advance_closed",
+				ExpenseID: ar.ID,
+				IsRead:    false,
+				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+			},
+		)
+	}()
+
+	return nil
 }
 
 func (r *AdvanceRequestsRepo) DeleteAdvanceRequest(id uint) error {

@@ -49,3 +49,7 @@ func (s *AdvanceRequestsService) UpdateAdvanceRequest(id uint, advanceRequest *m
 func (s *AdvanceRequestsService) DeleteAdvanceRequest(id uint) error {
 	return s.AdvanceRequestsRepo.DeleteAdvanceRequest(id)
 }
+
+func (s *AdvanceRequestsService) CloseAdvanceRequest(id uint, actorUserID uint, comment *string) error {
+	return s.AdvanceRequestsRepo.CloseAdvanceRequest(id, actorUserID, comment)
+}

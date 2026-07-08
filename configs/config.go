@@ -263,6 +263,7 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Advance Request", Entity: "advance-request", Action: "approve", ActionName: "Approve Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "reject", ActionName: "Reject Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "close", ActionName: "Manually Close Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "send-to-sqlacc", ActionName: "Send To SQL Account"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "export", ActionName: "Export Advance Requests"},
 
 		// User

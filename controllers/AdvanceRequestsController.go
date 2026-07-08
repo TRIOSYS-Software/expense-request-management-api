@@ -340,6 +340,17 @@ func (ac *AdvanceRequestsController) ServeAdvanceRequestAttachment(c echo.Contex
 	return c.File(filePath)
 }
 
+func (ac *AdvanceRequestsController) SendAdvanceRequestToSQLACC(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid advance request id"})
+	}
+	if err := ac.AdvanceRequestsService.SendAdvanceRequestToSQLACC(uint(id)); err != nil {
+		return c.JSON(http.StatusConflict, echo.Map{"message": err.Error()})
+	}
+	return c.JSON(http.StatusOK, "Advance request sent to SQLACC successfully")
+}
+
 func (ac *AdvanceRequestsController) CloseAdvanceRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

@@ -702,6 +702,10 @@ func (r *AdvanceRequestsRepo) CloseAdvanceRequest(id uint, actorUserID uint, com
 	return nil
 }
 
+func (r *AdvanceRequestsRepo) UpdateSendToSQLACCStatus(id uint, status bool) error {
+	return r.db.Model(&models.AdvanceRequests{}).Where("id = ?", id).Update("is_send_to_sqlacc", status).Error
+}
+
 func (r *AdvanceRequestsRepo) DeleteAdvanceRequest(id uint) error {
 	tx := r.db.Begin()
 

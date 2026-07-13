@@ -78,13 +78,34 @@ func (r *NotificationRepo) DeleteNotification(id uint) error {
 	return r.db.Delete(&models.Notification{}, id).Error
 }
 
-func (r *NotificationRepo) DeleteActionableForRequest(tx *gorm.DB, requestID uint, types []string) error {
+// DeleteActionableForRequest deletes actionable notifications for a request and
+// returns the (userID -> deleted notification IDs) map so callers can push
+// realtime WebSocket removals to the affected clients after the tx commits.
+func (r *NotificationRepo) DeleteActionableForRequest(tx *gorm.DB, requestID uint, types []string) (map[uint][]uint, error) {
 	db := r.db
 	if tx != nil {
 		db = tx
 	}
-	return db.Where("expense_id = ? AND type IN ?", requestID, types).
-		Delete(&models.Notification{}).Error
+
+	var toDelete []models.Notification
+	if err := db.Where("expense_id = ? AND type IN ?", requestID, types).
+		Find(&toDelete).Error; err != nil {
+		return nil, err
+	}
+	if len(toDelete) == 0 {
+		return nil, nil
+	}
+
+	perUser := make(map[uint][]uint, len(toDelete))
+	for _, n := range toDelete {
+		perUser[n.UserID] = append(perUser[n.UserID], n.ID)
+	}
+
+	if err := db.Where("expense_id = ? AND type IN ?", requestID, types).
+		Delete(&models.Notification{}).Error; err != nil {
+		return nil, err
+	}
+	return perUser, nil
 }
 
 func (r *NotificationRepo) ClearAllNotifications(userID uint) error {

@@ -93,11 +93,12 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 		return err
 	}
 
-	if err := r.notificationRepo.DeleteActionableForRequest(
+	removedPerUser, err := r.notificationRepo.DeleteActionableForRequest(
 		tx,
 		advanceRequest.ID,
 		[]string{"advance_new_request", "advance_pending_approval"},
-	); err != nil {
+	)
+	if err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -120,7 +121,11 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 			tx.Rollback()
 			return err
 		}
-		return tx.Commit().Error
+		if err := tx.Commit().Error; err != nil {
+			return err
+		}
+		broadcastNotificationRemovals(advanceRequest.ID, removedPerUser)
+		return nil
 	}
 
 	if advanceApproval.Status == "approved" {
@@ -155,7 +160,11 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 		tx.Rollback()
 		return err
 	}
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	broadcastNotificationRemovals(advanceRequest.ID, removedPerUser)
+	return nil
 }
 
 func (r *AdvanceApprovalsRepo) sendSingleNotification(

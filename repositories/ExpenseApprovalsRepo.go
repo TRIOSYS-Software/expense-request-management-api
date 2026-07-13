@@ -94,11 +94,12 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 		return err
 	}
 
-	if err := r.notificationRepo.DeleteActionableForRequest(
+	removedPerUser, err := r.notificationRepo.DeleteActionableForRequest(
 		tx,
 		expenseRequest.ID,
 		[]string{"new_request", "pending_approval"},
-	); err != nil {
+	)
+	if err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -123,7 +124,11 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 			return err
 		}
 
-		return tx.Commit().Error
+		if err := tx.Commit().Error; err != nil {
+			return err
+		}
+		broadcastNotificationRemovals(expenseRequest.ID, removedPerUser)
+		return nil
 	}
 
 	if expenseApproval.Status == "approved" {
@@ -199,7 +204,21 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 		}
 	}
 
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	broadcastNotificationRemovals(expenseRequest.ID, removedPerUser)
+	return nil
+}
+
+// broadcastNotificationRemovals fans out realtime WebSocket "remove these
+// notifications" events to every user whose actionable entries were cleared as
+// part of the approval action. Called *after* tx.Commit() so we never announce
+// a removal for changes that got rolled back.
+func broadcastNotificationRemovals(requestID uint, perUser map[uint][]uint) {
+	for userID, ids := range perUser {
+		go utilities.SendWebSocketRemoval(userID, requestID, ids)
+	}
 }
 
 func (r *ExpenseApprovalsRepo) sendSingleNotification(

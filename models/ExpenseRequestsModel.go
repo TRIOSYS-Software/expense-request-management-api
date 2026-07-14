@@ -14,7 +14,7 @@ type ExpenseRequests struct {
 	Attachment           *string                     `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
 	CreatedAt            time.Time                   `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`
 	UpdatedAt            time.Time                   `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
-	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected');not null;default:'pending'"`
+	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected', 'completed');not null;default:'pending'"`
 	CurrentApproverLevel uint                        `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
 	IsSendToSQLACC       bool                        `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
 	AdvanceRequestID     *uint                       `json:"advance_request_id,omitempty" form:"advance_request_id" gorm:"nullable;index"`
@@ -29,4 +29,8 @@ type ExpenseRequests struct {
 	AdvanceRequest       *AdvanceRequests            `json:"advance_request,omitempty" gorm:"foreignKey:AdvanceRequestID;references:ID"`
 	KeptAttachmentIDs    []uint                      `json:"kept_attachment_ids,omitempty" form:"kept_attachment_ids" gorm:"-"`
 	KeepLegacyAttachment bool                        `json:"keep_legacy_attachment,omitempty" form:"keep_legacy_attachment" gorm:"-"`
+	CompletionComment    *string                     `json:"completion_comment,omitempty" gorm:"type:text"`
+	CompletedByUserID    *uint                       `json:"completed_by_user_id,omitempty"`
+	CompletedAt          *time.Time                  `json:"completed_at,omitempty"`
+	CompletedByUser      *Users                      `json:"completed_by_user,omitempty" gorm:"foreignKey:CompletedByUserID;references:ID"`
 }

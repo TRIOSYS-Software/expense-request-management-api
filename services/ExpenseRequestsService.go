@@ -58,15 +58,22 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 	if err != nil {
 		return err
 	}
-	if expenseRequest.Status == "approved" {
-		if err := callSQLACCAPI(expenseRequest, expenseRequest.PaymentMethods.DESCRIPTION); err != nil {
-			return err
-		}
-		if err := s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true); err != nil {
-			return err
-		}
+	if expenseRequest.IsSendToSQLACC {
+		return fmt.Errorf("expense request already sent to SQLACC")
 	}
-	return nil
+	switch expenseRequest.Status {
+	case "approved", "completed":
+	default:
+		return fmt.Errorf("expense request must be approved or completed to sync")
+	}
+	if err := callSQLACCAPI(expenseRequest, expenseRequest.PaymentMethods.DESCRIPTION); err != nil {
+		return err
+	}
+	return s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true)
+}
+
+func (s *ExpenseRequestsService) CompleteExpenseRequest(id uint, actorUserID uint, comment *string) error {
+	return s.ExpenseRequestsRepo.CompleteExpenseRequest(id, actorUserID, comment)
 }
 
 func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string) error {

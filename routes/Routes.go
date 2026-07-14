@@ -134,6 +134,7 @@ func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase
 	e.GET("/expense-requests/summary", expenseRequestsController.GetExpenseRequestsSummary, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/analytics", expenseRequestsController.GetAnalytics, middlewares.IsAuthenticated)
 	e.POST("/expense-requests/:id/send-to-sqlacc", expenseRequestsController.SendExpenseRequestToSQLACC, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "send-to-sqlacc"))
+	e.PATCH("/expense-requests/:id/complete", expenseRequestsController.CompleteExpenseRequest, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "complete"))
 	e.DELETE("/expense-requests/:id", expenseRequestsController.DeleteExpenseRequest, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/attachment/:filename", expenseRequestsController.ServeExpenseRequestAttachment)
 }

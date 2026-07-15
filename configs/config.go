@@ -192,6 +192,25 @@ func (c *Config) InitializedDB() {
 		}
 	}
 
+	var expenseStatusType string
+	c.DB.Raw(`
+		SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'expense_requests'
+		  AND COLUMN_NAME = 'status'
+	`).Scan(&expenseStatusType)
+	if expenseStatusType != "" && !strings.Contains(expenseStatusType, "'completed'") {
+		if err := c.DB.Exec(`
+			ALTER TABLE expense_requests
+			MODIFY COLUMN status ENUM('pending','approved','rejected','completed')
+			NOT NULL DEFAULT 'pending'
+		`).Error; err != nil {
+			log.Printf("Failed to extend expense_requests.status enum: %v", err)
+		} else {
+			fmt.Println("✅ expense_requests.status enum extended with 'completed'")
+		}
+	}
+
 	if err := SeedPermissions(c.DB); err != nil {
 		log.Fatalf("Failed to seed permissions: %v", err)
 	}
@@ -250,9 +269,11 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Expense Request", Entity: "expense-request", Action: "create", ActionName: "Create Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "update", ActionName: "Update Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "delete", ActionName: "Delete Expense Request"},
+		{Name: "Expense Request", Entity: "expense-request", Action: "soft-delete", ActionName: "Archive Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "approve", ActionName: "Approve Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "reject", ActionName: "Reject Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "send-to-sqlacc", ActionName: "Send To SQL Account"},
+		{Name: "Expense Request", Entity: "expense-request", Action: "complete", ActionName: "Manually Complete Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "export", ActionName: "Export Expense Requests"},
 
 		// Advance Request
@@ -260,6 +281,7 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Advance Request", Entity: "advance-request", Action: "create", ActionName: "Create Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "update", ActionName: "Update Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "delete", ActionName: "Delete Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "soft-delete", ActionName: "Archive Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "approve", ActionName: "Approve Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "reject", ActionName: "Reject Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "close", ActionName: "Manually Close Advance Request"},

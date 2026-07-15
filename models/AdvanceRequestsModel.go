@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type AdvanceRequests struct {
 	ID                   uint                        `json:"id,omitempty" gorm:"primaryKey;autoIncrement;unique"`
@@ -14,6 +18,7 @@ type AdvanceRequests struct {
 	Attachment           *string                     `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
 	CreatedAt            time.Time                   `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`
 	UpdatedAt            time.Time                   `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
+	DeletedAt            gorm.DeletedAt              `json:"deleted_at,omitempty" gorm:"index"`
 	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected', 'completed', 'closed');not null;default:'pending'"`
 	CurrentApproverLevel uint                        `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
 	IsSendToSQLACC       bool                        `json:"is_send_to_sql_acc" gorm:"not null;default:false"`

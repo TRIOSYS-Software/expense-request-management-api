@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"shwetaik-expense-management-api/configs"
+	"shwetaik-expense-management-api/models"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
@@ -63,6 +64,12 @@ func RequirePermission(db *gorm.DB, entity string, action string) echo.Middlewar
 			userRoleID, ok := userRoleIDFloat.(uint)
 			if !ok {
 				userRoleID = uint(c.Get("user_role").(float64))
+			}
+
+			// Admin bypass: users on an is_admin role skip the permission check.
+			var role models.Roles
+			if err := db.Select("id, is_admin").First(&role, userRoleID).Error; err == nil && role.IsAdmin {
+				return next(c)
 			}
 
 			var count int64

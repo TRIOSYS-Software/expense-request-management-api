@@ -525,7 +525,7 @@ func (r *AdvanceRequestsRepo) UpdateAdvanceRequest(id uint, advanceRequest *mode
 
 	for _, att := range existingAttachments {
 		if !keptIDsMap[att.ID] {
-			if err := tx.Delete(&att).Error; err != nil {
+			if err := tx.Unscoped().Delete(&att).Error; err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -706,6 +706,45 @@ func (r *AdvanceRequestsRepo) UpdateSendToSQLACCStatus(id uint, status bool) err
 	return r.db.Model(&models.AdvanceRequests{}).Where("id = ?", id).Update("is_send_to_sqlacc", status).Error
 }
 
+// SoftDeleteAdvanceRequest marks the AR (and its attachments) as deleted and cascade-soft-deletes
+// every linked expense request (and their attachments). Records remain in the DB for audit but are
+// filtered out of default listings by GORM's soft-delete behavior.
+func (r *AdvanceRequestsRepo) SoftDeleteAdvanceRequest(id uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var ar models.AdvanceRequests
+		if err := tx.First(&ar, id).Error; err != nil {
+			return err
+		}
+
+		var linkedERs []models.ExpenseRequests
+		if err := tx.Where("advance_request_id = ?", id).Find(&linkedERs).Error; err != nil {
+			return err
+		}
+		for _, er := range linkedERs {
+			if err := tx.Where("expense_request_id = ?", er.ID).Delete(&models.ExpenseRequestAttachments{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&models.ExpenseRequests{}, er.ID).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.Where("advance_request_id = ?", id).Delete(&models.AdvanceRequestAttachments{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.AdvanceRequests{}, id).Error
+	})
+}
+
+// CountLinkedExpenseRequests returns the number of (non-soft-deleted) expense requests
+// currently linked to the given advance request. Used by the frontend to show a cascade
+// warning before confirming a soft-delete.
+func (r *AdvanceRequestsRepo) CountLinkedExpenseRequests(id uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&models.ExpenseRequests{}).Where("advance_request_id = ?", id).Count(&count).Error
+	return count, err
+}
+
 func (r *AdvanceRequestsRepo) DeleteAdvanceRequest(id uint) error {
 	tx := r.db.Begin()
 
@@ -733,11 +772,11 @@ func (r *AdvanceRequestsRepo) DeleteAdvanceRequest(id uint) error {
 		tx.Rollback()
 		return err
 	}
-	if err := tx.Where("advance_request_id = ?", id).Delete(&models.AdvanceRequestAttachments{}).Error; err != nil {
+	if err := tx.Unscoped().Where("advance_request_id = ?", id).Delete(&models.AdvanceRequestAttachments{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
-	if err := tx.Where("id = ?", id).Delete(&models.AdvanceRequests{}).Error; err != nil {
+	if err := tx.Unscoped().Where("id = ?", id).Delete(&models.AdvanceRequests{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}

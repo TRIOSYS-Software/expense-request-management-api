@@ -520,6 +520,17 @@ func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error 
 	return c.JSON(http.StatusOK, "Expense request deleted successfully")
 }
 
+func (ex *ExpenseRequestsController) SoftDeleteExpenseRequest(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
+	}
+	if err := ex.ExpenseRequestsService.SoftDeleteExpenseRequest(uint(id)); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
+	}
+	return c.JSON(http.StatusOK, echo.Map{"message": "Expense request soft-deleted"})
+}
+
 func (ex *ExpenseRequestsController) CompleteExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

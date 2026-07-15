@@ -564,7 +564,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	for _, att := range existingAttachments {
 		if !keptIDsMap[att.ID] {
 			// Delete from DB
-			if err := tx.Delete(&att).Error; err != nil {
+			if err := tx.Unscoped().Delete(&att).Error; err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -732,11 +732,22 @@ func (r *ExpenseRequestsRepo) DeleteExpenseRequest(id uint) error {
 		tx.Rollback()
 		return err
 	}
-	if err := tx.Where("id = ?", id).Delete(&models.ExpenseRequests{}).Error; err != nil {
+	if err := tx.Unscoped().Where("id = ?", id).Delete(&models.ExpenseRequests{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
 	return tx.Commit().Error
+}
+
+// SoftDeleteExpenseRequest marks the ER and its attachments as deleted (GORM soft-delete).
+// Records remain in the DB for audit but are filtered out of default listings.
+func (r *ExpenseRequestsRepo) SoftDeleteExpenseRequest(id uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("expense_request_id = ?", id).Delete(&models.ExpenseRequestAttachments{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.ExpenseRequests{}, id).Error
+	})
 }
 
 func (r *ExpenseRequestsRepo) GetAnalytics(filters map[string]any) (dtos.AnalyticsResponse, error) {

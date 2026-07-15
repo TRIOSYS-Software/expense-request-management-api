@@ -130,3 +130,7 @@ func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string)
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {
 	return s.ExpenseRequestsRepo.DeleteExpenseRequest(id)
 }
+
+func (s *ExpenseRequestsService) SoftDeleteExpenseRequest(id uint) error {
+	return s.ExpenseRequestsRepo.SoftDeleteExpenseRequest(id)
+}

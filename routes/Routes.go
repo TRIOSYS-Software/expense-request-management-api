@@ -136,6 +136,7 @@ func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase
 	e.POST("/expense-requests/:id/send-to-sqlacc", expenseRequestsController.SendExpenseRequestToSQLACC, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "send-to-sqlacc"))
 	e.PATCH("/expense-requests/:id/complete", expenseRequestsController.CompleteExpenseRequest, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "complete"))
 	e.DELETE("/expense-requests/:id", expenseRequestsController.DeleteExpenseRequest, middlewares.IsAuthenticated)
+	e.POST("/expense-requests/:id/soft-delete", expenseRequestsController.SoftDeleteExpenseRequest, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "soft-delete"))
 	e.GET("/expense-requests/attachment/:filename", expenseRequestsController.ServeExpenseRequestAttachment)
 }
 
@@ -162,6 +163,7 @@ func initAdvanceRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase
 	e.GET("/advance-requests/user/:id", advanceRequestsController.GetAdvanceRequestsByUserID, middlewares.IsAuthenticated)
 	e.GET("/advance-requests/approver/:id", advanceRequestsController.GetAdvanceRequestByApproverID, middlewares.IsAuthenticated)
 	e.DELETE("/advance-requests/:id", advanceRequestsController.DeleteAdvanceRequest, middlewares.IsAuthenticated)
+	e.POST("/advance-requests/:id/soft-delete", advanceRequestsController.SoftDeleteAdvanceRequest, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "advance-request", "soft-delete"))
 	e.PATCH("/advance-requests/:id/close", advanceRequestsController.CloseAdvanceRequest, middlewares.IsAuthenticated)
 	e.POST("/advance-requests/:id/send-to-sqlacc", advanceRequestsController.SendAdvanceRequestToSQLACC, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "advance-request", "send-to-sqlacc"))
 	e.GET("/advance-requests/attachment/:filename", advanceRequestsController.ServeAdvanceRequestAttachment)

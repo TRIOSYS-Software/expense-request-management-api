@@ -4,6 +4,7 @@ import (
 	"shwetaik-expense-management-api/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ProjectRepo struct {
@@ -23,12 +24,38 @@ func (r *ProjectRepo) GetProjects() ([]models.Project, error) {
 	return projects, nil
 }
 
-func (r *ProjectRepo) SaveProjects(projects []models.Project) error {
-	for _, project := range projects {
-		err := r.db.Save(&project).Error
-		if err != nil {
-			return err
+// SaveProjects upserts the supplied set and removes any locally cached rows
+// whose CODE is not in the new set, all within one transaction.
+func (r *ProjectRepo) SaveProjects(projects []models.Project) (SyncCounts, error) {
+	var counts SyncCounts
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		keep := make([]string, 0, len(projects))
+		for _, p := range projects {
+			keep = append(keep, p.CODE)
 		}
-	}
-	return nil
+
+		del := tx.Where("CODE NOT IN ?", keep)
+		if len(keep) == 0 {
+			del = tx.Where("1 = 1")
+		}
+		delRes := del.Delete(&models.Project{})
+		if delRes.Error != nil {
+			return delRes.Error
+		}
+		counts.Deleted = delRes.RowsAffected
+
+		if len(projects) == 0 {
+			return nil
+		}
+		upRes := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "CODE"}},
+			UpdateAll: true,
+		}).Create(&projects)
+		if upRes.Error != nil {
+			return upRes.Error
+		}
+		counts.Upserted = upRes.RowsAffected
+		return nil
+	})
+	return counts, err
 }

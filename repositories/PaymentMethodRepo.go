@@ -4,6 +4,7 @@ import (
 	"shwetaik-expense-management-api/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PaymentMethodRepo struct {
@@ -32,12 +33,38 @@ func (r *PaymentMethodRepo) GetPaymentMethodByCode(code string) (*models.Payment
 	return &paymentMethod, nil
 }
 
-func (r *PaymentMethodRepo) SavePaymentMethods(paymentMethods []models.PaymentMethod) error {
-	for _, paymentMethod := range paymentMethods {
-		err := r.db.Save(&paymentMethod).Error
-		if err != nil {
-			return err
+// SavePaymentMethods upserts the supplied set and removes any locally cached
+// rows whose CODE is not in the new set, all within one transaction.
+func (r *PaymentMethodRepo) SavePaymentMethods(paymentMethods []models.PaymentMethod) (SyncCounts, error) {
+	var counts SyncCounts
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		keep := make([]string, 0, len(paymentMethods))
+		for _, p := range paymentMethods {
+			keep = append(keep, p.CODE)
 		}
-	}
-	return nil
+
+		del := tx.Where("CODE NOT IN ?", keep)
+		if len(keep) == 0 {
+			del = tx.Where("1 = 1")
+		}
+		delRes := del.Delete(&models.PaymentMethod{})
+		if delRes.Error != nil {
+			return delRes.Error
+		}
+		counts.Deleted = delRes.RowsAffected
+
+		if len(paymentMethods) == 0 {
+			return nil
+		}
+		upRes := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "CODE"}},
+			UpdateAll: true,
+		}).Create(&paymentMethods)
+		if upRes.Error != nil {
+			return upRes.Error
+		}
+		counts.Upserted = upRes.RowsAffected
+		return nil
+	})
+	return counts, err
 }

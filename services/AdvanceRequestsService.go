@@ -1,16 +1,15 @@
 package services
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	helper "shwetaik-expense-management-api/Helper"
-	"shwetaik-expense-management-api/configs"
+	"time"
+
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
-	"strings"
+	"shwetaik-expense-management-api/sqlacc"
 )
 
 type AdvanceRequestsService struct {
@@ -82,59 +81,48 @@ func (s *AdvanceRequestsService) SendAdvanceRequestToSQLACC(id uint) error {
 	default:
 		return fmt.Errorf("advance request must be approved, completed, or closed to sync")
 	}
-	if err := callSQLACCAPIForAdvance(advance, advance.PaymentMethods.DESCRIPTION); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if err := sendAdvancePaymentVoucher(ctx, advance); err != nil {
 		return err
 	}
 	return s.AdvanceRequestsRepo.UpdateSendToSQLACCStatus(advance.ID, true)
 }
 
-func callSQLACCAPIForAdvance(advance *models.AdvanceRequests, paymentMethod string) error {
-	var docKey string
-	if strings.Contains(strings.ToLower(paymentMethod), "bank") {
-		docKey = fmt.Sprintf("APP-B-ADV-%d", advance.ID)
-	} else {
-		docKey = fmt.Sprintf("APP-C-ADV-%d", advance.ID)
-	}
-	data := map[string]any{
-		"DOCNO":         docKey,
-		"DOCTYPE":       "PV",
-		"DESCRIPTION":   advance.Description,
-		"PAYMENTMETHOD": advance.PaymentMethod,
-		"PROJECT":       advance.Project,
-		"DETAILS": []map[string]any{
-			{
-				"CODE":           advance.GLAccounts.CODE,
-				"DESCRIPTION":    advance.Description,
-				"PROJECT":        advance.Project,
-				"AMOUNT":         advance.Amount,
-				"LOCALAMOUNT":    advance.Amount,
-				"CURRENCYAMOUNT": advance.Amount,
-			},
-		},
-	}
-	jsonData, err := json.Marshal(data)
+func sendAdvancePaymentVoucher(ctx context.Context, ar *models.AdvanceRequests) error {
+	body, err := json.Marshal(buildAdvancePaymentVoucherPayload(ar))
 	if err != nil {
 		return err
 	}
 
-	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, "payments")
-
-	req, err := http.NewRequest("POST", api, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("ShweTaik", helper.GetToken(configs.Envs.SQLACC_API_PASSWORD, configs.Envs.SQLACC_API_KEY))
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := sqlacc.Default().Post(ctx, "/payment-vouchers", body)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("API call failed with status code: %d", resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("payment-vouchers POST failed: status %d", resp.StatusCode)
 	}
-
 	return nil
+}
+
+func buildAdvancePaymentVoucherPayload(ar *models.AdvanceRequests) map[string]any {
+	return map[string]any{
+		"docdate":       time.Now().Format("2006-01-02"),
+		"paymentmethod": ar.PaymentMethod,
+		"description":   ar.Description,
+		"project":       ar.Project,
+		"docamt":        ar.Amount,
+		"sdsdocdetail": []map[string]any{
+			{
+				"code":        ar.GLAccounts.CODE,
+				"description": ar.Description,
+				"amount":      ar.Amount,
+				"project":     ar.Project,
+			},
+		},
+	}
 }

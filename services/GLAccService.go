@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	glAccountsPath   = "/account"
+	glAccountsPath   = "/gl-accounts"
 	glAccSyncTimeout = 10 * time.Minute
 )
 
@@ -37,29 +37,31 @@ type glAccDTO struct {
 	Code           string `json:"code"`
 	Description    string `json:"description"`
 	Description2   string `json:"description2"`
-	AccType        string `json:"acctype"`
-	SpecialAccType string `json:"specialacctype"`
+	AccType        string `json:"acc_type"`
+	SpecialAccType string `json:"special_acc_type"`
 	Tax            string `json:"tax"`
-	CashflowType   int    `json:"cashflowtype"`
+	CashflowType   *int   `json:"cash_flow_type"`
 	SIC            string `json:"sic"`
 }
 
 type glAccListEnvelope struct {
-	Data  []glAccDTO `json:"data"`
-	Count int        `json:"count"`
+	Status     string     `json:"status"`
+	Message    string     `json:"message"`
+	Data       []glAccDTO `json:"data"`
+	Pagination pageMeta   `json:"pagination"`
 }
 
-// FetchAllGLAcc pulls the entire chart of accounts from SQL Acc by paginating
-// /account with no code filter.
 func FetchAllGLAcc(ctx context.Context) ([]models.GLAcc, error) {
 	client := sqlacc.Default()
 	var all []models.GLAcc
-	offset := 0
+	after := ""
 
 	for {
 		q := url.Values{}
-		q.Set("offset", strconv.Itoa(offset))
 		q.Set("limit", strconv.Itoa(pageSizeHint))
+		if after != "" {
+			q.Set("after", after)
+		}
 
 		resp, err := client.Get(ctx, glAccountsPath, q)
 		if err != nil {
@@ -68,22 +70,26 @@ func FetchAllGLAcc(ctx context.Context) ([]models.GLAcc, error) {
 		var env glAccListEnvelope
 		if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 			resp.Body.Close()
-			return nil, fmt.Errorf("decode gl-acc offset=%d: %w", offset, err)
+			return nil, fmt.Errorf("decode gl-acc after=%q: %w", after, err)
 		}
 		resp.Body.Close()
 
-		if len(env.Data) == 0 {
-			break
-		}
 		for _, dto := range env.Data {
 			all = append(all, glAccFromDTO(dto))
 		}
-		offset += len(env.Data)
+		if !env.Pagination.HasMore || env.Pagination.After == "" {
+			break
+		}
+		after = env.Pagination.After
 	}
 	return all, nil
 }
 
 func glAccFromDTO(d glAccDTO) models.GLAcc {
+	cashflow := 0
+	if d.CashflowType != nil {
+		cashflow = *d.CashflowType
+	}
 	return models.GLAcc{
 		DOCKEY:         d.DocKey,
 		PARENT:         d.Parent,
@@ -93,7 +99,7 @@ func glAccFromDTO(d glAccDTO) models.GLAcc {
 		ACCTYPE:        d.AccType,
 		SPECIALACCTYPE: d.SpecialAccType,
 		TAX:            d.Tax,
-		CASHFLOWTYPE:   d.CashflowType,
+		CASHFLOWTYPE:   cashflow,
 		SIC:            d.SIC,
 	}
 }

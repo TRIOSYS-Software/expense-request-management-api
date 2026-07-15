@@ -5,21 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/url"
-	"strconv"
 	"time"
 
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
 	"shwetaik-expense-management-api/sqlacc"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const (
-	paymentMethodsPath        = "/pmmethod"
-	paymentMethodSyncTimeout  = 15 * time.Minute
-	paymentMethodDetailWorker = 5
+	paymentMethodsPath       = "/payment-methods"
+	paymentMethodSyncTimeout = 5 * time.Minute
 )
 
 type PaymentMethodService struct {
@@ -34,100 +29,46 @@ func (s *PaymentMethodService) GetPaymentMethods() ([]models.PaymentMethod, erro
 	return s.repo.GetPaymentMethods()
 }
 
-// paymentMethodDTO is the shape returned by both /pmmethod (list) and
-// /pmmethod/<code> (detail). The list response omits `description`, so we
-// must call the detail endpoint per code to populate it.
 type paymentMethodDTO struct {
 	Code         string `json:"code"`
 	Journal      string `json:"journal"`
-	CurrencyCode string `json:"currencycode"`
+	CurrencyCode string `json:"currency_code"`
 	Description  string `json:"description"`
 }
 
 type paymentMethodListEnvelope struct {
-	Data  []paymentMethodDTO `json:"data"`
-	Count int                `json:"count"`
+	Status  string             `json:"status"`
+	Message string             `json:"message"`
+	Data    []paymentMethodDTO `json:"data"`
 }
 
 func FetchAllPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error) {
 	const tag = "[sync:payment-methods]"
 	client := sqlacc.Default()
 
-	// 1. List all payment-method codes (paginated).
 	listStart := time.Now()
-	var listed []paymentMethodDTO
-	offset := 0
-	for {
-		q := url.Values{}
-		q.Set("offset", strconv.Itoa(offset))
-		q.Set("limit", strconv.Itoa(pageSizeHint))
-
-		resp, err := client.Get(ctx, paymentMethodsPath, q)
-		if err != nil {
-			return nil, err
-		}
-		var env paymentMethodListEnvelope
-		if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
-			resp.Body.Close()
-			return nil, fmt.Errorf("decode payment methods offset=%d: %w", offset, err)
-		}
-		resp.Body.Close()
-
-		if len(env.Data) == 0 {
-			break
-		}
-		listed = append(listed, env.Data...)
-		offset += len(env.Data)
-	}
-	log.Printf("%s list: %d codes in %s", tag, len(listed), time.Since(listStart).Round(time.Millisecond))
-
-	// 2. For each listed code, fetch the detail to get `description`.
-	// Run with bounded concurrency: detail calls are independent and the cloud
-	// round-trip dominates wall time, so sequential N+1 over a flaky link
-	// would burn the sync's whole context budget.
-	detailStart := time.Now()
-	out := make([]models.PaymentMethod, len(listed))
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(paymentMethodDetailWorker)
-
-	for i, item := range listed {
-		i, code := i, item.Code
-		g.Go(func() error {
-			detail, err := fetchPaymentMethodDetail(gctx, client, code)
-			if err != nil {
-				return err
-			}
-			out[i] = models.PaymentMethod{
-				CODE:         detail.Code,
-				JOURNAL:      detail.Journal,
-				CURRENCYCODE: detail.CurrencyCode,
-				DESCRIPTION:  detail.Description,
-			}
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
+	resp, err := client.Get(ctx, paymentMethodsPath, nil)
+	if err != nil {
 		return nil, err
 	}
-	log.Printf("%s details: %d in %s (concurrency=%d)", tag, len(out), time.Since(detailStart).Round(time.Millisecond), paymentMethodDetailWorker)
-	return out, nil
-}
-
-func fetchPaymentMethodDetail(ctx context.Context, client *sqlacc.SQLAccClient, code string) (paymentMethodDTO, error) {
-	resp, err := client.Get(ctx, paymentMethodsPath+"/"+url.PathEscape(code), nil)
-	if err != nil {
-		return paymentMethodDTO{}, fmt.Errorf("fetch payment-method detail %s: %w", code, err)
-	}
-	defer resp.Body.Close()
-
 	var env paymentMethodListEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
-		return paymentMethodDTO{}, fmt.Errorf("decode payment-method detail %s: %w", code, err)
+		resp.Body.Close()
+		return nil, fmt.Errorf("decode payment methods: %w", err)
 	}
-	if len(env.Data) == 0 {
-		return paymentMethodDTO{}, fmt.Errorf("payment-method detail %s: empty data", code)
+	resp.Body.Close()
+
+	out := make([]models.PaymentMethod, len(env.Data))
+	for i, dto := range env.Data {
+		out[i] = models.PaymentMethod{
+			CODE:         dto.Code,
+			JOURNAL:      dto.Journal,
+			CURRENCYCODE: dto.CurrencyCode,
+			DESCRIPTION:  dto.Description,
+		}
 	}
-	return env.Data[0], nil
+	log.Printf("%s list: %d in %s", tag, len(out), time.Since(listStart).Round(time.Millisecond))
+	return out, nil
 }
 
 func (s *PaymentMethodService) SyncPaymentMethods() error {

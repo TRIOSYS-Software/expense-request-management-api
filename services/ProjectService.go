@@ -15,10 +15,16 @@ import (
 )
 
 const (
-	projectsPath       = "/project"
+	projectsPath       = "/projects"
 	projectSyncTimeout = 5 * time.Minute
 	pageSizeHint       = 200
 )
+
+type pageMeta struct {
+	Limit   int    `json:"limit"`
+	After   string `json:"after"`
+	HasMore bool   `json:"has_more"`
+}
 
 type ProjectService struct {
 	repo *repositories.ProjectRepo
@@ -32,31 +38,33 @@ func (s *ProjectService) GetProjects() ([]models.Project, error) {
 	return s.repo.GetProjects()
 }
 
-// projectDTO mirrors the official SQL Acc /project response field names.
-// Numeric fields come back as strings (e.g. "0.00"); parsed during mapping.
 type projectDTO struct {
-	Code         string `json:"code"`
-	Description  string `json:"description"`
-	Description2 string `json:"description2"`
-	ProjectValue string `json:"projectvalue"`
-	ProjectCost  string `json:"projectcost"`
-	IsActive     bool   `json:"isactive"`
+	Code         string   `json:"code"`
+	Description  string   `json:"description"`
+	Description2 string   `json:"description2"`
+	ProjectValue *float64 `json:"project_value"`
+	ProjectCost  *float64 `json:"project_cost"`
+	IsActive     *bool    `json:"is_active"`
 }
 
 type projectListEnvelope struct {
-	Data  []projectDTO `json:"data"`
-	Count int          `json:"count"`
+	Status     string       `json:"status"`
+	Message    string       `json:"message"`
+	Data       []projectDTO `json:"data"`
+	Pagination pageMeta     `json:"pagination"`
 }
 
 func FetchAllProjects(ctx context.Context) ([]models.Project, error) {
 	client := sqlacc.Default()
 	var all []models.Project
-	offset := 0
+	after := ""
 
 	for {
 		q := url.Values{}
-		q.Set("offset", strconv.Itoa(offset))
 		q.Set("limit", strconv.Itoa(pageSizeHint))
+		if after != "" {
+			q.Set("after", after)
+		}
 
 		resp, err := client.Get(ctx, projectsPath, q)
 		if err != nil {
@@ -65,25 +73,23 @@ func FetchAllProjects(ctx context.Context) ([]models.Project, error) {
 		var env projectListEnvelope
 		if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 			resp.Body.Close()
-			return nil, fmt.Errorf("decode projects offset=%d: %w", offset, err)
+			return nil, fmt.Errorf("decode projects after=%q: %w", after, err)
 		}
 		resp.Body.Close()
 
-		if len(env.Data) == 0 {
-			break
-		}
 		for _, dto := range env.Data {
 			all = append(all, projectFromDTO(dto))
 		}
-		offset += len(env.Data)
+		if !env.Pagination.HasMore || env.Pagination.After == "" {
+			break
+		}
+		after = env.Pagination.After
 	}
 	return all, nil
 }
 
 func projectFromDTO(d projectDTO) models.Project {
-	p := models.Project{
-		CODE: d.Code,
-	}
+	p := models.Project{CODE: d.Code}
 	if d.Description != "" {
 		desc := d.Description
 		p.DESCRIPTION = &desc
@@ -92,14 +98,12 @@ func projectFromDTO(d projectDTO) models.Project {
 		d2 := d.Description2
 		p.DESCRIPTION2 = &d2
 	}
-	if v, err := strconv.ParseFloat(d.ProjectValue, 64); err == nil {
-		p.PROJECTVALUE = &v
+	p.PROJECTVALUE = d.ProjectValue
+	p.PROJECTCOST = d.ProjectCost
+	if d.IsActive != nil {
+		active := *d.IsActive
+		p.ISACTIVE = &active
 	}
-	if v, err := strconv.ParseFloat(d.ProjectCost, 64); err == nil {
-		p.PROJECTCOST = &v
-	}
-	active := d.IsActive
-	p.ISACTIVE = &active
 	return p
 }
 

@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"shwetaik-expense-management-api/dtos"
@@ -82,116 +79,40 @@ func (s *ExpenseRequestsService) CompleteExpenseRequest(id uint, actorUserID uin
 	return s.ExpenseRequestsRepo.CompleteExpenseRequest(id, actorUserID, comment)
 }
 
-func paymentVoucherDocNo(expenseRequest *models.ExpenseRequests) string {
-	if strings.Contains(strings.ToLower(expenseRequest.PaymentMethods.DESCRIPTION), "bank") {
-		return fmt.Sprintf("APP-B-PV-%d", expenseRequest.ID)
-	}
-	return fmt.Sprintf("APP-C-PV-%d", expenseRequest.ID)
-}
-
-// paymentVoucherExists returns true if SQL Acc already has a PV with this
-// docno. The deterministic docno scheme (APP-{B|C}-PV-{id}) is our
-// idempotency key, so a retry after a flaky-network success doesn't double-post.
-func paymentVoucherExists(ctx context.Context, docno string) (bool, error) {
-	q := url.Values{}
-	q.Set("docno", docno)
-
-	resp, err := sqlacc.Default().Get(ctx, "/paymentvoucher", q)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return false, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("paymentvoucher precheck: status %d", resp.StatusCode)
-	}
-
-	var env struct {
-		Data  []map[string]any `json:"data"`
-		Count int              `json:"count"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
-		return false, fmt.Errorf("paymentvoucher precheck decode: %w", err)
-	}
-	return len(env.Data) > 0, nil
-}
-
 func sendPaymentVoucher(ctx context.Context, er *models.ExpenseRequests) error {
-	docno := paymentVoucherDocNo(er)
-
-	exists, err := paymentVoucherExists(ctx, docno)
-	if err != nil {
-		return err
-	}
-	if exists {
-		// Already in SQL Acc — treat as success so the local flag flips
-		// without re-posting and creating a duplicate.
-		return nil
-	}
-
-	body, err := json.Marshal(buildPaymentVoucherPayload(er, docno))
+	body, err := json.Marshal(buildPaymentVoucherPayload(er))
 	if err != nil {
 		return err
 	}
 
-	resp, err := sqlacc.Default().Post(ctx, "/paymentvoucher", body)
+	resp, err := sqlacc.Default().Post(ctx, "/payment-vouchers", body)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("paymentvoucher POST failed: status %d", resp.StatusCode)
+		return fmt.Errorf("payment-vouchers POST failed: status %d", resp.StatusCode)
 	}
 	return nil
 }
 
-// buildPaymentVoucherPayload maps an approved expense request to the SQL Acc
-// /paymentvoucher schema. Field selection mirrors the postman collection; the
-// numeric fields are sent as strings ("0.00") per the example body. Most
-// optional fields (irbm_*, eiv_*, address*, …) are left empty.
-//
-// NOTE: pending vendor confirmation of required fields. Values here are based
-// on the postman example and the local model.
-func buildPaymentVoucherPayload(er *models.ExpenseRequests, docno string) map[string]any {
-	today := time.Now().Format("2006-01-02")
-	amount := formatMoney(er.Amount)
-
-	detail := map[string]any{
-		"seq":            0,
-		"code":           er.GLAccounts.CODE,
-		"project":        er.Project,
-		"description":    er.Description,
-		"amount":         amount,
-		"localamount":    amount,
-		"currencyamount": amount,
-		"currencycode":   er.PaymentMethods.CURRENCYCODE,
-		"taxinclusive":   false,
-		"changed":        true,
-	}
-
+func buildPaymentVoucherPayload(er *models.ExpenseRequests) map[string]any {
 	return map[string]any{
-		"docno":         docno,
-		"doctype":       "PV",
-		"docdate":       today,
-		"postdate":      today,
-		"description":   er.Description,
+		"docdate":       time.Now().Format("2006-01-02"),
 		"paymentmethod": er.PaymentMethod,
+		"description":   er.Description,
 		"project":       er.Project,
-		"currencycode":  er.PaymentMethods.CURRENCYCODE,
-		"docamt":        amount,
-		"localdocamt":   amount,
-		"cancelled":     false,
-		"changed":       true,
-		"sdsdocdetail":  []map[string]any{detail},
+		"docamt":        er.Amount,
+		"sdsdocdetail": []map[string]any{
+			{
+				"code":        er.GLAccounts.CODE,
+				"description": er.Description,
+				"amount":      er.Amount,
+				"project":     er.Project,
+			},
+		},
 	}
-}
-
-func formatMoney(v float64) string {
-	return fmt.Sprintf("%.2f", v)
 }
 
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {

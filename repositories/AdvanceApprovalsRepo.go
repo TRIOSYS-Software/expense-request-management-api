@@ -93,6 +93,16 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 		return err
 	}
 
+	removedPerUser, err := r.notificationRepo.DeleteActionableForRequest(
+		tx,
+		advanceRequest.ID,
+		[]string{"advance_new_request", "advance_pending_approval"},
+	)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	if advanceApproval.Status == "rejected" {
 		advanceRequest.Status = "rejected"
 		advanceRequest.CurrentApproverLevel = toUpdate.Level
@@ -111,7 +121,11 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 			tx.Rollback()
 			return err
 		}
-		return tx.Commit().Error
+		if err := tx.Commit().Error; err != nil {
+			return err
+		}
+		broadcastNotificationRemovals(advanceRequest.ID, removedPerUser)
+		return nil
 	}
 
 	if advanceApproval.Status == "approved" {
@@ -146,7 +160,11 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 		tx.Rollback()
 		return err
 	}
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	broadcastNotificationRemovals(advanceRequest.ID, removedPerUser)
+	return nil
 }
 
 func (r *AdvanceApprovalsRepo) sendSingleNotification(
@@ -164,7 +182,7 @@ func (r *AdvanceApprovalsRepo) sendSingleNotification(
 		IsRead:    false,
 	}
 
-	_ = r.notificationRepo.CreateNotification(notification)
+	_ = tx.Create(notification).Error
 
 	tokens, err := r.deviceTokenRepo.GetTokensByUserID(userID)
 	if err == nil && len(tokens) > 0 {

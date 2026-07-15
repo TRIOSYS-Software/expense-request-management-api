@@ -15,6 +15,7 @@ import (
 	firebase "firebase.google.com/go/v4"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AdvanceRequestsRepo struct {
@@ -209,8 +210,15 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 	var advanceRequests []models.AdvanceRequests
 	var summary dtos.AdvanceRequestSummary
 
-	db := r.db.Model(&models.AdvanceRequests{}).Preload("Approvals")
-	if filters["user_id"] != nil && filters["approver_id"] != nil {
+	db := r.db.Model(&models.AdvanceRequests{})
+	if filters["need_my_approval"] != nil && filters["approver_id"] != nil {
+		// Awaiting: items pending at the caller's approval level.
+		db = db.Joins("JOIN advance_approvals ON advance_approvals.request_id = advance_requests.id").
+			Where("advance_approvals.approver_id = ?", filters["approver_id"]).
+			Where("advance_requests.status = 'pending'").
+			Where("advance_approvals.level = advance_requests.current_approver_level").
+			Group("advance_requests.id")
+	} else if filters["user_id"] != nil && filters["approver_id"] != nil {
 		db = db.Joins("LEFT JOIN advance_approvals ON advance_approvals.request_id = advance_requests.id").
 			Where("(advance_requests.user_id = ? OR advance_approvals.approver_id = ?)", filters["user_id"], filters["approver_id"]).
 			Group("advance_requests.id")
@@ -231,19 +239,42 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 		summary.DailyTotal = make(map[string]dtos.DailyBreakdown)
 	}
 
+	if filters["search"] != nil {
+		search := filters["search"].(string)
+		db = db.Joins("LEFT JOIN users search_users ON search_users.id = advance_requests.user_id").
+			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = advance_requests.project")
+		pattern := "%" + search + "%"
+		if idVal, err := strconv.Atoi(search); err == nil {
+			db = db.Where("(advance_requests.id = ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, pattern, pattern, pattern)
+		} else {
+			db = db.Where("(search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", pattern, pattern, pattern)
+		}
+	}
+
 	db.Find(&advanceRequests)
+	_ = fillAdvanceBalances(r.db, advanceRequests)
+
+	arIDs := make([]uint, 0, len(advanceRequests))
+	for _, ar := range advanceRequests {
+		arIDs = append(arIDs, ar.ID)
+	}
 
 	for _, ar := range advanceRequests {
 		summary.TotalAmount = summary.TotalAmount + ar.Amount
 		switch ar.Status {
 		case "pending":
 			summary.Pending++
+			summary.PendingAmount += ar.Amount
 		case "approved":
 			summary.Approved++
+			summary.ApprovedAmount += ar.Amount
+			// Only approved advances contribute to outstanding remaining balance.
+			summary.RemainingAmount += ar.RemainingBalance
 		case "rejected":
 			summary.Rejected++
 		case "completed":
 			summary.Completed++
+			summary.CompletedAmount += ar.Amount
 		}
 
 		if filters["start_date"] != nil && filters["end_date"] != nil {
@@ -260,6 +291,19 @@ func (r *AdvanceRequestsRepo) GetAdvanceRequestsSummary(filters map[string]any) 
 			summary.DailyTotal[date] = entry
 		}
 	}
+
+	// "Settled" = amount taken from these advances by approved expense requests
+	// (sum of advance_used_amount across approved linked ERs).
+	if len(arIDs) > 0 {
+		var taken *float64
+		if err := r.db.Model(&models.ExpenseRequests{}).
+			Where("advance_request_id IN ? AND status = ?", arIDs, "approved").
+			Select("SUM(advance_used_amount)").
+			Scan(&taken).Error; err == nil && taken != nil {
+			summary.SettledAmount = *taken
+		}
+	}
+
 	summary.Total = len(advanceRequests)
 	return summary, nil
 }
@@ -481,7 +525,7 @@ func (r *AdvanceRequestsRepo) UpdateAdvanceRequest(id uint, advanceRequest *mode
 
 	for _, att := range existingAttachments {
 		if !keptIDsMap[att.ID] {
-			if err := tx.Delete(&att).Error; err != nil {
+			if err := tx.Unscoped().Delete(&att).Error; err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -557,6 +601,150 @@ func (r *AdvanceRequestsRepo) UpdateAdvanceRequest(id uint, advanceRequest *mode
 	return tx.Commit().Error
 }
 
+func (r *AdvanceRequestsRepo) CloseAdvanceRequest(id uint, actorUserID uint, comment *string) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = tx.Rollback()
+			log.Printf("PANIC recovered in CloseAdvanceRequest: %v", rec)
+		}
+	}()
+
+	var ar models.AdvanceRequests
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("User").First(&ar, id).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	var actor models.Users
+	if err := tx.Preload("Roles").First(&actor, actorUserID).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	isAdmin := actor.Roles != nil && actor.Roles.IsAdmin
+	if !isAdmin && ar.UserID != actorUserID {
+		tx.Rollback()
+		return fmt.Errorf("Only the requester or an admin can close this advance request")
+	}
+
+	if ar.Status != "approved" {
+		tx.Rollback()
+		return fmt.Errorf("Only approved advance requests can be closed")
+	}
+
+	var pendingCount int64
+	if err := tx.Model(&models.ExpenseRequests{}).
+		Where("advance_request_id = ? AND status = ?", id, "pending").
+		Count(&pendingCount).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if pendingCount > 0 {
+		tx.Rollback()
+		return fmt.Errorf("Cannot close advance request: linked expense requests are still pending")
+	}
+
+	now := time.Now()
+	ar.Status = "closed"
+	ar.ClosureComment = comment
+	ar.ClosedByUserID = &actorUserID
+	ar.ClosedAt = &now
+
+	if err := tx.Save(&ar).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	// Notify the requester that their advance has been manually closed.
+	go func() {
+		msg := fmt.Sprintf(
+			"Your advance request (#%d - '%s') has been manually closed.",
+			ar.ID, ar.Description,
+		)
+		notification := &models.Notification{
+			UserID:    ar.UserID,
+			ExpenseID: ar.ID,
+			Message:   msg,
+			Type:      "advance_closed",
+			IsRead:    false,
+		}
+		if err := r.notificationRepo.CreateNotification(notification); err != nil {
+			log.Printf("Error saving close notification for user %d: %v", ar.UserID, err)
+		}
+
+		tokens, err := r.deviceTokenRepo.GetTokensByUserID(ar.UserID)
+		if err == nil && len(tokens) > 0 {
+			data := map[string]string{
+				"advanceId": fmt.Sprintf("%d", ar.ID),
+				"type":      "advance_closed",
+			}
+			r.notificationRepo.SendPushNotification(tokens, "Advance Request Closed", msg, data)
+		}
+
+		utilities.SendWebSocketMessage(
+			ar.UserID,
+			utilities.WebSocketMessagePayload{
+				ID:        notification.ID,
+				Message:   msg,
+				Type:      "advance_closed",
+				ExpenseID: ar.ID,
+				IsRead:    false,
+				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+			},
+		)
+	}()
+
+	return nil
+}
+
+func (r *AdvanceRequestsRepo) UpdateSendToSQLACCStatus(id uint, status bool) error {
+	return r.db.Model(&models.AdvanceRequests{}).Where("id = ?", id).Update("is_send_to_sqlacc", status).Error
+}
+
+// SoftDeleteAdvanceRequest marks the AR (and its attachments) as deleted and cascade-soft-deletes
+// every linked expense request (and their attachments). Records remain in the DB for audit but are
+// filtered out of default listings by GORM's soft-delete behavior.
+func (r *AdvanceRequestsRepo) SoftDeleteAdvanceRequest(id uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var ar models.AdvanceRequests
+		if err := tx.First(&ar, id).Error; err != nil {
+			return err
+		}
+
+		var linkedERs []models.ExpenseRequests
+		if err := tx.Where("advance_request_id = ?", id).Find(&linkedERs).Error; err != nil {
+			return err
+		}
+		for _, er := range linkedERs {
+			if err := tx.Where("expense_request_id = ?", er.ID).Delete(&models.ExpenseRequestAttachments{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&models.ExpenseRequests{}, er.ID).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.Where("advance_request_id = ?", id).Delete(&models.AdvanceRequestAttachments{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.AdvanceRequests{}, id).Error
+	})
+}
+
+// CountLinkedExpenseRequests returns the number of (non-soft-deleted) expense requests
+// currently linked to the given advance request. Used by the frontend to show a cascade
+// warning before confirming a soft-delete.
+func (r *AdvanceRequestsRepo) CountLinkedExpenseRequests(id uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&models.ExpenseRequests{}).Where("advance_request_id = ?", id).Count(&count).Error
+	return count, err
+}
+
 func (r *AdvanceRequestsRepo) DeleteAdvanceRequest(id uint) error {
 	tx := r.db.Begin()
 
@@ -584,11 +772,11 @@ func (r *AdvanceRequestsRepo) DeleteAdvanceRequest(id uint) error {
 		tx.Rollback()
 		return err
 	}
-	if err := tx.Where("advance_request_id = ?", id).Delete(&models.AdvanceRequestAttachments{}).Error; err != nil {
+	if err := tx.Unscoped().Where("advance_request_id = ?", id).Delete(&models.AdvanceRequestAttachments{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
-	if err := tx.Where("id = ?", id).Delete(&models.AdvanceRequests{}).Error; err != nil {
+	if err := tx.Unscoped().Where("id = ?", id).Delete(&models.AdvanceRequests{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}

@@ -124,6 +124,14 @@ func (ac *AdvanceRequestsController) GetAdvanceRequestsSummary(c echo.Context) e
 		filters["status"] = c.QueryParam("status")
 	}
 
+	if v, err := strconv.ParseBool(c.QueryParam("need_my_approval")); err == nil && v {
+		filters["need_my_approval"] = true
+	}
+
+	if s := c.QueryParam("search"); s != "" {
+		filters["search"] = s
+	}
+
 	summary, err := ac.AdvanceRequestsService.GetAdvanceRequestsSummary(filters)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
@@ -326,8 +334,50 @@ func (ac *AdvanceRequestsController) DeleteAdvanceRequest(c echo.Context) error 
 	return c.JSON(http.StatusOK, "Advance request deleted successfully")
 }
 
+func (ac *AdvanceRequestsController) SoftDeleteAdvanceRequest(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid advance request id"})
+	}
+	linkedCount, _ := ac.AdvanceRequestsService.CountLinkedExpenseRequests(uint(id))
+	if err := ac.AdvanceRequestsService.SoftDeleteAdvanceRequest(uint(id)); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
+	}
+	return c.JSON(http.StatusOK, echo.Map{
+		"message":                  "Advance request soft-deleted",
+		"cascaded_expense_request": linkedCount,
+	})
+}
+
 func (ac *AdvanceRequestsController) ServeAdvanceRequestAttachment(c echo.Context) error {
 	file := c.Param("filename")
 	filePath := filepath.Join(ac.UploadDir, file)
 	return c.File(filePath)
+}
+
+func (ac *AdvanceRequestsController) SendAdvanceRequestToSQLACC(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid advance request id"})
+	}
+	if err := ac.AdvanceRequestsService.SendAdvanceRequestToSQLACC(uint(id)); err != nil {
+		return c.JSON(http.StatusConflict, echo.Map{"message": err.Error()})
+	}
+	return c.JSON(http.StatusOK, "Advance request sent to SQLACC successfully")
+}
+
+func (ac *AdvanceRequestsController) CloseAdvanceRequest(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid advance request id"})
+	}
+	var body dtos.CloseAdvanceRequestDTO
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
+	}
+	actorUserID := uint(c.Get("user_id").(float64))
+	if err := ac.AdvanceRequestsService.CloseAdvanceRequest(uint(id), actorUserID, body.Comment); err != nil {
+		return c.JSON(http.StatusConflict, echo.Map{"message": err.Error()})
+	}
+	return c.JSON(http.StatusOK, echo.Map{"message": "Advance request closed"})
 }

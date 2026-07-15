@@ -60,8 +60,13 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 	if err != nil {
 		return err
 	}
-	if expenseRequest.Status != "approved" {
-		return nil
+	if expenseRequest.IsSendToSQLACC {
+		return fmt.Errorf("expense request already sent to SQLACC")
+	}
+	switch expenseRequest.Status {
+	case "approved", "completed":
+	default:
+		return fmt.Errorf("expense request must be approved or completed to sync")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -71,6 +76,10 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 		return err
 	}
 	return s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true)
+}
+
+func (s *ExpenseRequestsService) CompleteExpenseRequest(id uint, actorUserID uint, comment *string) error {
+	return s.ExpenseRequestsRepo.CompleteExpenseRequest(id, actorUserID, comment)
 }
 
 func paymentVoucherDocNo(expenseRequest *models.ExpenseRequests) string {
@@ -187,4 +196,8 @@ func formatMoney(v float64) string {
 
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {
 	return s.ExpenseRequestsRepo.DeleteExpenseRequest(id)
+}
+
+func (s *ExpenseRequestsService) SoftDeleteExpenseRequest(id uint) error {
+	return s.ExpenseRequestsRepo.SoftDeleteExpenseRequest(id)
 }

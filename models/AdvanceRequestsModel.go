@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type AdvanceRequests struct {
 	ID                   uint                        `json:"id,omitempty" gorm:"primaryKey;autoIncrement;unique"`
@@ -14,8 +18,10 @@ type AdvanceRequests struct {
 	Attachment           *string                     `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
 	CreatedAt            time.Time                   `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`
 	UpdatedAt            time.Time                   `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
-	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected', 'completed');not null;default:'pending'"`
+	DeletedAt            gorm.DeletedAt              `json:"deleted_at,omitempty" gorm:"index"`
+	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected', 'completed', 'closed');not null;default:'pending'"`
 	CurrentApproverLevel uint                        `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
+	IsSendToSQLACC       bool                        `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
 	Approvals            []AdvanceApprovals          `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
 	User                 Users                       `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`
 	PaymentMethods       PaymentMethod               `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE"`
@@ -28,4 +34,8 @@ type AdvanceRequests struct {
 	KeepLegacyAttachment bool                        `json:"keep_legacy_attachment,omitempty" form:"keep_legacy_attachment" gorm:"-"`
 	RemainingBalance     float64                     `json:"remaining_balance" gorm:"-"`
 	SettledAmount        float64                     `json:"settled_amount" gorm:"-"`
+	ClosureComment       *string                     `json:"closure_comment,omitempty" gorm:"type:text"`
+	ClosedByUserID       *uint                       `json:"closed_by_user_id,omitempty"`
+	ClosedAt             *time.Time                  `json:"closed_at,omitempty"`
+	ClosedByUser         *Users                      `json:"closed_by_user,omitempty" gorm:"foreignKey:ClosedByUserID;references:ID"`
 }

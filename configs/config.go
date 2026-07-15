@@ -29,10 +29,8 @@ type Config struct {
 	DBName              string
 	DB                  *gorm.DB
 	JWTSecret           string
-	SQLACC_API_PASSWORD string
-	SQLACC_API_KEY      string
-	SQLACC_API_URL      string
-	FILTER_GL_CODES     string
+	SQLACC_API_ENDPOINT string
+	SQLACC_API_TOKEN    string
 	FRONTEND_URL        string
 	EMAIL_USERNAME      string
 	EMAIL_PASSWORD      string
@@ -68,10 +66,8 @@ func loadEnv(env string) *Config {
 	cfg.DBName = getEnvOrDefault("DB_NAME", "test")
 	cfg.DBPort = getEnvOrDefault("DB_PORT", "3306")
 	cfg.JWTSecret = getEnvOrDefault("JWT_SECRET", "")
-	cfg.SQLACC_API_PASSWORD = getEnvOrDefault("SQLACC_API_PASSWORD", "")
-	cfg.SQLACC_API_KEY = getEnvOrDefault("SQLACC_API_KEY", "")
-	cfg.SQLACC_API_URL = getEnvOrDefault("SQLACC_API_URL", "")
-	cfg.FILTER_GL_CODES = getEnvOrDefault("FILTER_GL_CODES", "")
+	cfg.SQLACC_API_ENDPOINT = getEnvOrDefault("SQLACC_API_ENDPOINT", "")
+	cfg.SQLACC_API_TOKEN = getEnvOrDefault("SQLACC_API_TOKEN", "")
 	cfg.FRONTEND_URL = getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
 	cfg.EMAIL_USERNAME = getEnvOrDefault("EMAIL_USERNAME", "")
 	cfg.EMAIL_PASSWORD = getEnvOrDefault("EMAIL_PASSWORD", "")
@@ -192,6 +188,25 @@ func (c *Config) InitializedDB() {
 		}
 	}
 
+	var expenseStatusType string
+	c.DB.Raw(`
+		SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'expense_requests'
+		  AND COLUMN_NAME = 'status'
+	`).Scan(&expenseStatusType)
+	if expenseStatusType != "" && !strings.Contains(expenseStatusType, "'completed'") {
+		if err := c.DB.Exec(`
+			ALTER TABLE expense_requests
+			MODIFY COLUMN status ENUM('pending','approved','rejected','completed')
+			NOT NULL DEFAULT 'pending'
+		`).Error; err != nil {
+			log.Printf("Failed to extend expense_requests.status enum: %v", err)
+		} else {
+			fmt.Println("✅ expense_requests.status enum extended with 'completed'")
+		}
+	}
+
 	if err := SeedPermissions(c.DB); err != nil {
 		log.Fatalf("Failed to seed permissions: %v", err)
 	}
@@ -250,9 +265,11 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Expense Request", Entity: "expense-request", Action: "create", ActionName: "Create Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "update", ActionName: "Update Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "delete", ActionName: "Delete Expense Request"},
+		{Name: "Expense Request", Entity: "expense-request", Action: "soft-delete", ActionName: "Archive Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "approve", ActionName: "Approve Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "reject", ActionName: "Reject Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "send-to-sqlacc", ActionName: "Send To SQL Account"},
+		{Name: "Expense Request", Entity: "expense-request", Action: "complete", ActionName: "Manually Complete Expense Request"},
 		{Name: "Expense Request", Entity: "expense-request", Action: "export", ActionName: "Export Expense Requests"},
 
 		// Advance Request
@@ -260,6 +277,7 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Advance Request", Entity: "advance-request", Action: "create", ActionName: "Create Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "update", ActionName: "Update Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "delete", ActionName: "Delete Advance Request"},
+		{Name: "Advance Request", Entity: "advance-request", Action: "soft-delete", ActionName: "Archive Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "approve", ActionName: "Approve Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "reject", ActionName: "Reject Advance Request"},
 		{Name: "Advance Request", Entity: "advance-request", Action: "close", ActionName: "Manually Close Advance Request"},

@@ -334,6 +334,21 @@ func (ac *AdvanceRequestsController) DeleteAdvanceRequest(c echo.Context) error 
 	return c.JSON(http.StatusOK, "Advance request deleted successfully")
 }
 
+func (ac *AdvanceRequestsController) SoftDeleteAdvanceRequest(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid advance request id"})
+	}
+	linkedCount, _ := ac.AdvanceRequestsService.CountLinkedExpenseRequests(uint(id))
+	if err := ac.AdvanceRequestsService.SoftDeleteAdvanceRequest(uint(id)); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
+	}
+	return c.JSON(http.StatusOK, echo.Map{
+		"message":                  "Advance request soft-deleted",
+		"cascaded_expense_request": linkedCount,
+	})
+}
+
 func (ac *AdvanceRequestsController) ServeAdvanceRequestAttachment(c echo.Context) error {
 	file := c.Param("filename")
 	filePath := filepath.Join(ac.UploadDir, file)

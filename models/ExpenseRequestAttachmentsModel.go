@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type ExpenseRequestAttachments struct {
 	ID               uint            `json:"id" gorm:"primaryKey;autoIncrement"`
@@ -9,5 +13,6 @@ type ExpenseRequestAttachments struct {
 	FileName         string          `json:"file_name" gorm:"not null"`
 	FileType         string          `json:"file_type"`
 	CreatedAt        time.Time       `json:"created_at" gorm:"autoCreateTime;not null"`
+	DeletedAt        gorm.DeletedAt  `json:"deleted_at,omitempty" gorm:"index"`
 	ExpenseRequest   ExpenseRequests `json:"-" gorm:"foreignKey:ExpenseRequestID"`
 }

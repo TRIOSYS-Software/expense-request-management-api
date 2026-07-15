@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"log"
 	"shwetaik-expense-management-api/controllers"
 	"shwetaik-expense-management-api/middlewares"
 	"shwetaik-expense-management-api/repositories"
@@ -134,7 +133,9 @@ func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase
 	e.GET("/expense-requests/summary", expenseRequestsController.GetExpenseRequestsSummary, middlewares.IsAuthenticated)
 	e.GET("/expense-requests/analytics", expenseRequestsController.GetAnalytics, middlewares.IsAuthenticated)
 	e.POST("/expense-requests/:id/send-to-sqlacc", expenseRequestsController.SendExpenseRequestToSQLACC, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "send-to-sqlacc"))
+	e.PATCH("/expense-requests/:id/complete", expenseRequestsController.CompleteExpenseRequest, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "complete"))
 	e.DELETE("/expense-requests/:id", expenseRequestsController.DeleteExpenseRequest, middlewares.IsAuthenticated)
+	e.POST("/expense-requests/:id/soft-delete", expenseRequestsController.SoftDeleteExpenseRequest, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "expense-request", "soft-delete"))
 	e.GET("/expense-requests/attachment/:filename", expenseRequestsController.ServeExpenseRequestAttachment)
 }
 
@@ -161,6 +162,7 @@ func initAdvanceRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase
 	e.GET("/advance-requests/user/:id", advanceRequestsController.GetAdvanceRequestsByUserID, middlewares.IsAuthenticated)
 	e.GET("/advance-requests/approver/:id", advanceRequestsController.GetAdvanceRequestByApproverID, middlewares.IsAuthenticated)
 	e.DELETE("/advance-requests/:id", advanceRequestsController.DeleteAdvanceRequest, middlewares.IsAuthenticated)
+	e.POST("/advance-requests/:id/soft-delete", advanceRequestsController.SoftDeleteAdvanceRequest, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "advance-request", "soft-delete"))
 	e.PATCH("/advance-requests/:id/close", advanceRequestsController.CloseAdvanceRequest, middlewares.IsAuthenticated)
 	e.POST("/advance-requests/:id/send-to-sqlacc", advanceRequestsController.SendAdvanceRequestToSQLACC, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "advance-request", "send-to-sqlacc"))
 	e.GET("/advance-requests/attachment/:filename", advanceRequestsController.ServeAdvanceRequestAttachment)
@@ -196,12 +198,7 @@ func initPaymentMethodsRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/payment-methods", paymentMethodController.GetPaymentMethods, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "payment-method", "view-payment-methods"))
 
 	go func() {
-		err := paymentMethodService.SyncPaymentMethods()
-		if err != nil {
-			log.Println(err.Error())
-		} else {
-			log.Println("Payment methods synced successfully")
-		}
+		_ = paymentMethodService.SyncPaymentMethods()
 	}()
 }
 
@@ -213,12 +210,7 @@ func initProjectsRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/projects", projectController.GetProjects, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "project", "view-projects"))
 
 	go func() {
-		err := projectService.SyncProjects()
-		if err != nil {
-			log.Println(err.Error())
-		} else {
-			log.Println("Projects synced successfully")
-		}
+		_ = projectService.SyncProjects()
 	}()
 }
 
@@ -230,12 +222,7 @@ func initGLAccRoutes(e *echo.Group, db *gorm.DB) {
 	e.POST("/gl-acc/sync", glAccController.SyncGLAcc, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "gl-account", "sync-gl-accounts"))
 
 	go func() {
-		err := glAccService.SyncGLAcc()
-		if err != nil {
-			log.Println(err)
-		} else {
-			log.Println("GLAcc synced successfully")
-		}
+		_ = glAccService.SyncGLAcc()
 	}()
 }
 

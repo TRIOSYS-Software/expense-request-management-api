@@ -16,6 +16,7 @@ import (
 	firebase "firebase.google.com/go/v4"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ExpenseRequestsRepo struct {
@@ -84,11 +85,12 @@ func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.E
 		if filter != nil && filter.Status != "" {
 			db = db.Where("expense_requests.status = ?", filter.Status)
 		} else if filter == nil || !filter.IncludedAsApprover {
-			// Admin All: every approved + every rejected + all pending
+			// Admin All: every approved + every rejected + all pending + all completed
 			db = db.Where(`(
 					expense_requests.status = 'approved'
 					OR expense_requests.status = 'rejected'
-					OR (expense_requests.status = 'pending')
+					OR expense_requests.status = 'pending'
+					OR expense_requests.status = 'completed'
 				)`)
 		}
 	}
@@ -215,6 +217,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 		case "approved":
 			summary.Approved++
 			summary.ApprovedAmount += expenseRequest.Amount
+		case "completed":
+			summary.Completed++
+			summary.CompletedAmount += expenseRequest.Amount
 		case "rejected":
 			summary.Rejected++
 		}
@@ -232,6 +237,8 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 				entry.Approved += expenseRequest.Amount
 			case "pending":
 				entry.Pending += expenseRequest.Amount
+			case "completed":
+				entry.Completed += expenseRequest.Amount
 			case "rejected":
 				entry.Rejected += expenseRequest.Amount
 			}
@@ -479,6 +486,7 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dto
 		db = db.Where(`(
 			(expense_requests.status = 'pending')
 			OR (expense_requests.status = 'approved')
+			OR (expense_requests.status = 'completed')
 			OR (expense_requests.status = 'rejected' AND expense_approvals.level <= expense_requests.current_approver_level)
 		)`)
 	}
@@ -556,7 +564,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	for _, att := range existingAttachments {
 		if !keptIDsMap[att.ID] {
 			// Delete from DB
-			if err := tx.Delete(&att).Error; err != nil {
+			if err := tx.Unscoped().Delete(&att).Error; err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -641,17 +649,105 @@ func (r *ExpenseRequestsRepo) UpdateSendToSQLACCStatus(id uint, status bool) err
 	return r.db.Model(&models.ExpenseRequests{}).Where("id = ?", id).Update("is_send_to_sqlacc", status).Error
 }
 
+func (r *ExpenseRequestsRepo) CompleteExpenseRequest(id uint, actorUserID uint, comment *string) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = tx.Rollback()
+			log.Printf("PANIC recovered in CompleteExpenseRequest: %v", rec)
+		}
+	}()
+
+	var er models.ExpenseRequests
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("User").First(&er, id).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if er.Status != "approved" {
+		tx.Rollback()
+		return fmt.Errorf("Only approved expense requests can be completed")
+	}
+
+	now := time.Now()
+	er.Status = "completed"
+	er.CompletionComment = comment
+	er.CompletedByUserID = &actorUserID
+	er.CompletedAt = &now
+
+	if err := tx.Save(&er).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	go func() {
+		msg := fmt.Sprintf(
+			"Your expense request (#%d - '%s') has been manually completed.",
+			er.ID, er.Description,
+		)
+		notification := &models.Notification{
+			UserID:    er.UserID,
+			ExpenseID: er.ID,
+			Message:   msg,
+			Type:      "expense_completed",
+			IsRead:    false,
+		}
+		if err := r.notificationRepo.CreateNotification(notification); err != nil {
+			log.Printf("Error saving complete notification for user %d: %v", er.UserID, err)
+		}
+
+		tokens, err := r.deviceTokenRepo.GetTokensByUserID(er.UserID)
+		if err == nil && len(tokens) > 0 {
+			data := map[string]string{
+				"expenseId": fmt.Sprintf("%d", er.ID),
+				"type":      "expense_completed",
+			}
+			r.notificationRepo.SendPushNotification(tokens, "Expense Request Completed", msg, data)
+		}
+
+		utilities.SendWebSocketMessage(
+			er.UserID,
+			utilities.WebSocketMessagePayload{
+				ID:        notification.ID,
+				Message:   msg,
+				Type:      "expense_completed",
+				ExpenseID: er.ID,
+				IsRead:    false,
+				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
+			},
+		)
+	}()
+
+	return nil
+}
+
 func (r *ExpenseRequestsRepo) DeleteExpenseRequest(id uint) error {
 	tx := r.db.Begin()
 	if err := tx.Where("request_id = ?", id).Delete(&models.ExpenseApprovals{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
-	if err := tx.Where("id = ?", id).Delete(&models.ExpenseRequests{}).Error; err != nil {
+	if err := tx.Unscoped().Where("id = ?", id).Delete(&models.ExpenseRequests{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
 	return tx.Commit().Error
+}
+
+// SoftDeleteExpenseRequest marks the ER and its attachments as deleted (GORM soft-delete).
+// Records remain in the DB for audit but are filtered out of default listings.
+func (r *ExpenseRequestsRepo) SoftDeleteExpenseRequest(id uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("expense_request_id = ?", id).Delete(&models.ExpenseRequestAttachments{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.ExpenseRequests{}, id).Error
+	})
 }
 
 func (r *ExpenseRequestsRepo) GetAnalytics(filters map[string]any) (dtos.AnalyticsResponse, error) {

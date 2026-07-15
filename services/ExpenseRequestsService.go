@@ -1,16 +1,15 @@
 package services
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	helper "shwetaik-expense-management-api/Helper"
-	"shwetaik-expense-management-api/configs"
+	"time"
+
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
-	"strings"
+	"shwetaik-expense-management-api/sqlacc"
 )
 
 type ExpenseRequestsService struct {
@@ -58,68 +57,68 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 	if err != nil {
 		return err
 	}
-	if expenseRequest.Status == "approved" {
-		if err := callSQLACCAPI(expenseRequest, expenseRequest.PaymentMethods.DESCRIPTION); err != nil {
-			return err
-		}
-		if err := s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true); err != nil {
-			return err
-		}
+	if expenseRequest.IsSendToSQLACC {
+		return fmt.Errorf("expense request already sent to SQLACC")
 	}
-	return nil
+	switch expenseRequest.Status {
+	case "approved", "completed":
+	default:
+		return fmt.Errorf("expense request must be approved or completed to sync")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if err := sendPaymentVoucher(ctx, expenseRequest); err != nil {
+		return err
+	}
+	return s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true)
 }
 
-func callSQLACCAPI(expenseRequest *models.ExpenseRequests, paymentMethod string) error {
-	var docKey string
-	if strings.Contains(strings.ToLower(paymentMethod), "bank") {
-		docKey = fmt.Sprintf("APP-B-PV-%d", expenseRequest.ID)
-	} else {
-		docKey = fmt.Sprintf("APP-C-PV-%d", expenseRequest.ID)
-	}
-	data := map[string]any{
-		"DOCNO":         docKey,
-		"DOCTYPE":       "PV",
-		"DESCRIPTION":   expenseRequest.Description,
-		"PAYMENTMETHOD": expenseRequest.PaymentMethod,
-		"PROJECT":       expenseRequest.Project,
-		"DETAILS": []map[string]any{
-			{
-				"CODE":           expenseRequest.GLAccounts.CODE,
-				"DESCRIPTION":    expenseRequest.Description,
-				"PROJECT":        expenseRequest.Project,
-				"AMOUNT":         expenseRequest.Amount,
-				"LOCALAMOUNT":    expenseRequest.Amount,
-				"CURRENCYAMOUNT": expenseRequest.Amount,
-			},
-		},
-	}
-	jsonData, err := json.Marshal(data)
+func (s *ExpenseRequestsService) CompleteExpenseRequest(id uint, actorUserID uint, comment *string) error {
+	return s.ExpenseRequestsRepo.CompleteExpenseRequest(id, actorUserID, comment)
+}
+
+func sendPaymentVoucher(ctx context.Context, er *models.ExpenseRequests) error {
+	body, err := json.Marshal(buildPaymentVoucherPayload(er))
 	if err != nil {
 		return err
 	}
 
-	api := fmt.Sprintf("%s/%s", configs.Envs.SQLACC_API_URL, "payments")
-
-	req, err := http.NewRequest("POST", api, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("ShweTaik", helper.GetToken(configs.Envs.SQLACC_API_PASSWORD, configs.Envs.SQLACC_API_KEY))
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := sqlacc.Default().Post(ctx, "/payment-vouchers", body)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("API call failed with status code: %d", resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("payment-vouchers POST failed: status %d", resp.StatusCode)
 	}
-
 	return nil
+}
+
+func buildPaymentVoucherPayload(er *models.ExpenseRequests) map[string]any {
+	return map[string]any{
+		"docdate":       time.Now().Format("2006-01-02"),
+		"paymentmethod": er.PaymentMethod,
+		"description":   er.Description,
+		"project":       er.Project,
+		"docamt":        er.Amount,
+		"sdsdocdetail": []map[string]any{
+			{
+				"code":        er.GLAccounts.CODE,
+				"description": er.Description,
+				"amount":      er.Amount,
+				"project":     er.Project,
+			},
+		},
+	}
 }
 
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {
 	return s.ExpenseRequestsRepo.DeleteExpenseRequest(id)
+}
+
+func (s *ExpenseRequestsService) SoftDeleteExpenseRequest(id uint) error {
+	return s.ExpenseRequestsRepo.SoftDeleteExpenseRequest(id)
 }

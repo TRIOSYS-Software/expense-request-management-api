@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"strings"
 	"time"
 
 	"shwetaik-expense-management-api/dtos"
@@ -92,9 +95,27 @@ func sendPaymentVoucher(ctx context.Context, er *models.ExpenseRequests) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("payment-vouchers POST failed: status %d", resp.StatusCode)
+		snippet := readBodySnippet(resp.Body, 1024)
+		log.Printf("[send-to-sqlacc] ER id=%d payment-vouchers POST -> %d body=%s payload=%s",
+			er.ID, resp.StatusCode, snippet, string(body))
+		return fmt.Errorf("payment-vouchers POST failed: status %d body=%s", resp.StatusCode, snippet)
 	}
 	return nil
+}
+
+func readBodySnippet(r io.Reader, max int) string {
+	if r == nil {
+		return ""
+	}
+	buf, err := io.ReadAll(io.LimitReader(r, int64(max)))
+	if err != nil {
+		return fmt.Sprintf("<read err: %v>", err)
+	}
+	s := strings.TrimSpace(string(buf))
+	if s == "" {
+		return "<empty>"
+	}
+	return s
 }
 
 func buildPaymentVoucherPayload(er *models.ExpenseRequests) map[string]any {

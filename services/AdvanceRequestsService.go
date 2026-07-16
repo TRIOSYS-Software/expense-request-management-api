@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"shwetaik-expense-management-api/dtos"
@@ -104,7 +105,10 @@ func sendAdvancePaymentVoucher(ctx context.Context, ar *models.AdvanceRequests) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("payment-vouchers POST failed: status %d", resp.StatusCode)
+		snippet := readBodySnippet(resp.Body, 1024)
+		log.Printf("[send-to-sqlacc] AR id=%d payment-vouchers POST -> %d body=%s payload=%s",
+			ar.ID, resp.StatusCode, snippet, string(body))
+		return fmt.Errorf("payment-vouchers POST failed: status %d body=%s", resp.StatusCode, snippet)
 	}
 	return nil
 }

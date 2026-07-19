@@ -88,7 +88,7 @@ func sendPaymentVoucher(ctx context.Context, er *models.ExpenseRequests) error {
 		return err
 	}
 
-	resp, err := sqlacc.Default().Post(ctx, "/payment-vouchers", body)
+	resp, err := sqlacc.Default().Post(ctx, "/payment-vouchers/direct", body)
 	if err != nil {
 		return err
 	}

@@ -120,6 +120,7 @@ func readBodySnippet(r io.Reader, max int) string {
 
 func buildPaymentVoucherPayload(er *models.ExpenseRequests) map[string]any {
 	return map[string]any{
+		"docno":         expenseRequestDocNo(er.PaymentMethods.DESCRIPTION, er.ID),
 		"docdate":       time.Now().Format("2006-01-02"),
 		"paymentmethod": er.PaymentMethod,
 		"description":   er.Description,
@@ -134,6 +135,15 @@ func buildPaymentVoucherPayload(er *models.ExpenseRequests) map[string]any {
 			},
 		},
 	}
+}
+
+func expenseRequestDocNo(paymentMethodDescription string, id uint) string {
+	desc := strings.ToLower(paymentMethodDescription)
+	if strings.Contains(desc, "bank") {
+		return fmt.Sprintf("APP-B-PV-%d", id)
+
+	}
+	return fmt.Sprintf("APP-C-PV-%d", id)
 }
 
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {

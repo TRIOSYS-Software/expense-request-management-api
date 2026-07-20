@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"shwetaik-expense-management-api/dtos"
@@ -115,6 +116,7 @@ func sendAdvancePaymentVoucher(ctx context.Context, ar *models.AdvanceRequests) 
 
 func buildAdvancePaymentVoucherPayload(ar *models.AdvanceRequests) map[string]any {
 	return map[string]any{
+		"docno":         advanceRequestDocNo(ar.PaymentMethods.DESCRIPTION, ar.ID),
 		"docdate":       time.Now().Format("2006-01-02"),
 		"paymentmethod": ar.PaymentMethod,
 		"description":   ar.Description,
@@ -129,4 +131,14 @@ func buildAdvancePaymentVoucherPayload(ar *models.AdvanceRequests) map[string]an
 			},
 		},
 	}
+}
+
+
+func advanceRequestDocNo(paymentMethodDescription string, id uint) string {
+	desc := strings.ToLower(paymentMethodDescription)
+	if strings.Contains(desc, "bank") {
+		return fmt.Sprintf("APP-B-ADV-%d", id)
+
+	}
+	return fmt.Sprintf("APP-C-ADV-%d", id)
 }

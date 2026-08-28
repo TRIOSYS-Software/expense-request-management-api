@@ -341,6 +341,10 @@ func SeedPermissions(db *gorm.DB) error {
 		{Name: "Project", Entity: "project", Action: "edit-assigned-project", ActionName: "Edit Assigned Project"},
 		{Name: "Project", Entity: "project", Action: "delete-assigned-project", ActionName: "Delete Assigned Project"},
 		{Name: "Project", Entity: "project", Action: "export-assigned-projects", ActionName: "Export Assigned Projects"},
+
+		// Approver List
+		{Name: "Approver List", Entity: "approver-list", Action: "view", ActionName: "View Approver List"},
+		{Name: "Approver List", Entity: "approver-list", Action: "export", ActionName: "Export Approver List"},
 	}
 
 	for _, perm := range permissions {

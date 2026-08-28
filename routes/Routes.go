@@ -30,7 +30,18 @@ func InitialRoute(e *echo.Echo, db *gorm.DB, firebaseApp *firebase.App) {
 	initGLAccRoutes(apiV1, db)
 
 	initDeviceTokenRoutes(apiV1, db)
+	initApproversRoutes(apiV1, db)
 	initWebsocketRoutes(e)
+}
+
+func initApproversRoutes(e *echo.Group, db *gorm.DB) {
+	approversRepo := repositories.NewApproversRepo(db)
+	approversService := services.NewApproversService(approversRepo)
+	approversController := controllers.NewApproversController(approversService)
+
+	e.GET("/approvers", approversController.GetApprovers, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "approver-list", "view"))
+	e.GET("/approvers/:id", approversController.GetApproverByID, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "approver-list", "view"))
+	e.GET("/approvers/:id/actions", approversController.GetApproverActions, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "approver-list", "view"))
 }
 
 func initUsersRoutes(e *echo.Group, db *gorm.DB) {

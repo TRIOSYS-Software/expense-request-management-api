@@ -26,8 +26,8 @@ func NewPaymentMethodController(paymentMethodService *services.PaymentMethodServ
 // @Failure 500 {object} string
 // @Router /payment-methods/sync [post]
 // @Security JWT Token
-func (c *PaymentMethodController) SyncPaymentMethods(ctx echo.Context) error {
-	err := c.paymentMethodService.SyncPaymentMethods()
+func (pm *PaymentMethodController) SyncPaymentMethods(ctx echo.Context) error {
+	err := pm.paymentMethodService.SyncPaymentMethods()
 	if err != nil {
 		log.Println(err)
 		return ctx.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
@@ -45,8 +45,8 @@ func (c *PaymentMethodController) SyncPaymentMethods(ctx echo.Context) error {
 // @Failure 404 {object} string
 // @Router /payment-methods [get]
 // @Security JWT Token
-func (c *PaymentMethodController) GetPaymentMethods(ctx echo.Context) error {
-	paymentMethods, err := c.paymentMethodService.GetPaymentMethods()
+func (pm *PaymentMethodController) GetPaymentMethods(ctx echo.Context) error {
+	paymentMethods, err := pm.paymentMethodService.GetPaymentMethods()
 	if err != nil {
 		log.Println(err)
 		return ctx.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})

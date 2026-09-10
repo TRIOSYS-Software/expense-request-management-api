@@ -12,14 +12,14 @@ type AdvanceRequests struct {
 	Description          string                      `json:"description,omitempty" form:"description" gorm:"not null"`
 	Project              string                      `json:"project,omitempty" form:"project" gorm:"type:VARCHAR;size:20;not null"`
 	PaymentMethod        string                      `json:"payment_method,omitempty" form:"payment_method" gorm:"type:VARCHAR;size:10;not null"`
-	UserID               uint                        `json:"user_id,omitempty" form:"user_id" gorm:"not null"`
+	UserID               uint                        `json:"user_id,omitempty" form:"user_id" gorm:"not null;index"`
 	GLAccount            string                      `json:"gl_account,omitempty" form:"gl_account" gorm:"not null"`
-	DateSubmitted        time.Time                   `json:"date_submitted,omitempty" form:"date_submitted" gorm:"not null"`
+	DateSubmitted        time.Time                   `json:"date_submitted,omitempty" form:"date_submitted" gorm:"not null;index"`
 	Attachment           *string                     `json:"attachment,omitempty" form:"attachment" gorm:"nullable"`
-	CreatedAt            time.Time                   `json:"created_at,omitempty" gorm:"autoCreateTime;not null"`
+	CreatedAt            time.Time                   `json:"created_at,omitempty" gorm:"autoCreateTime;not null;index"`
 	UpdatedAt            time.Time                   `json:"updated_at,omitempty" gorm:"autoUpdateTime;not null"`
 	DeletedAt            gorm.DeletedAt              `json:"deleted_at,omitempty" gorm:"index"`
-	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected', 'completed', 'closed');not null;default:'pending'"`
+	Status               string                      `json:"status,omitempty" gorm:"type:enum('pending', 'approved', 'rejected', 'completed', 'closed');not null;default:'pending';index"`
 	CurrentApproverLevel uint                        `json:"current_approver_level,omitempty" gorm:"not null;default:1"`
 	IsSendToSQLACC       bool                        `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
 	Approvals            []AdvanceApprovals          `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`

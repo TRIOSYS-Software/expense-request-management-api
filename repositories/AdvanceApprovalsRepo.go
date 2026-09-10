@@ -3,8 +3,9 @@ package repositories
 import (
 	"errors"
 	"fmt"
+	"log"
 	"shwetaik-expense-management-api/models"
-	"shwetaik-expense-management-api/utilities"
+	"shwetaik-expense-management-api/notifications"
 	"time"
 
 	firebase "firebase.google.com/go/v4"
@@ -16,13 +17,17 @@ type AdvanceApprovalsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
 	deviceTokenRepo  *DeviceTokenRepo
+	notifier         *notifier
 }
 
 func NewAdvanceApprovalsRepo(db *gorm.DB, firebaseApp *firebase.App) *AdvanceApprovalsRepo {
+	notificationRepo := NewNotificationRepo(db, firebaseApp)
+	deviceTokenRepo := NewDeviceTokenRepo(db)
 	return &AdvanceApprovalsRepo{
 		db:               db,
-		notificationRepo: NewNotificationRepo(db, firebaseApp),
-		deviceTokenRepo:  NewDeviceTokenRepo(db),
+		notificationRepo: notificationRepo,
+		deviceTokenRepo:  deviceTokenRepo,
+		notifier:         newNotifier(notificationRepo, deviceTokenRepo),
 	}
 }
 
@@ -42,11 +47,13 @@ func (r *AdvanceApprovalsRepo) GetAdvanceApprovalsByApproverID(approverID uint) 
 	return advanceApprovals
 }
 
-func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *models.AdvanceApprovals) error {
+func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *models.AdvanceApprovals) (err error) {
 	tx := r.db.Begin()
 	defer func() {
 		if rec := recover(); rec != nil {
 			_ = tx.Rollback()
+			err = fmt.Errorf("internal error in UpdateAdvanceApproval: %v", rec)
+			log.Printf("PANIC recovered in UpdateAdvanceApproval: %v", rec)
 		}
 	}()
 
@@ -124,7 +131,7 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 		if err := tx.Commit().Error; err != nil {
 			return err
 		}
-		broadcastNotificationRemovals(advanceRequest.ID, removedPerUser)
+		notifications.BroadcastRemovals(advanceRequest.ID, removedPerUser)
 		return nil
 	}
 
@@ -163,47 +170,26 @@ func (r *AdvanceApprovalsRepo) UpdateAdvanceApproval(id uint, advanceApproval *m
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}
-	broadcastNotificationRemovals(advanceRequest.ID, removedPerUser)
+	notifications.BroadcastRemovals(advanceRequest.ID, removedPerUser)
 	return nil
 }
 
+// sendSingleNotification persists a notification inside tx and fans it out.
 func (r *AdvanceApprovalsRepo) sendSingleNotification(
 	tx *gorm.DB,
 	userID uint,
-	advanceID uint,
+	requestID uint,
 	message string,
 	notificationType string,
 ) {
-	notification := &models.Notification{
+	r.notifier.dispatchTx(tx, notifications.Notification{
 		UserID:    userID,
-		ExpenseID: advanceID,
+		RequestID: requestID,
 		Message:   message,
 		Type:      notificationType,
-		IsRead:    false,
-	}
-
-	_ = tx.Create(notification).Error
-
-	tokens, err := r.deviceTokenRepo.GetTokensByUserID(userID)
-	if err == nil && len(tokens) > 0 {
-		data := map[string]string{
-			"advanceId": fmt.Sprintf("%d", advanceID),
-			"type":      notificationType,
-		}
-		go r.notificationRepo.SendPushNotification(tokens, "Advance Request", message, data)
-	}
-
-	go utilities.SendWebSocketMessage(
-		userID,
-		utilities.WebSocketMessagePayload{
-			ID:        notification.ID,
-			Message:   message,
-			Type:      notificationType,
-			ExpenseID: advanceID,
-			IsRead:    false,
-			CreatedAt: notification.CreatedAt.Format(time.RFC3339),
-		},
-	)
+		PushTitle: "Advance Request",
+		Kind:      notifications.Advance,
+	})
 }
 
 func (r *AdvanceApprovalsRepo) UpdateAdvanceApprovalComment(id uint, comments string) error {

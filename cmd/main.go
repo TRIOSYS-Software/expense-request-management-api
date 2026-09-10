@@ -40,6 +40,10 @@ func main() {
 
 	cfg := configs.Envs
 
+	if err := configs.Validate(); err != nil {
+		e.Logger.Fatal(err)
+	}
+
 	if err := cfg.ConnectDB(); err != nil {
 		e.Logger.Fatal(err)
 	}
@@ -58,7 +62,8 @@ func main() {
 	if cfg.Environment == "dev" {
 		e.GET("/swagger/*", echoSwagger.WrapHandler)
 	}
-	routes.InitialRoute(e, cfg.DB, cfg.FirebaseApp)
+	routes.InitialRoute(e, cfg.DB, cfg.FirebaseApp, cfg.UploadDir)
+	routes.StartBackgroundSync(cfg.DB)
 
 	e.Logger.Fatal(e.Start(cfg.ServerIP + ":" + cfg.ServerPort))
 }

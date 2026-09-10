@@ -3,8 +3,9 @@ package repositories
 import (
 	"errors"
 	"fmt"
+	"log"
 	"shwetaik-expense-management-api/models"
-	"shwetaik-expense-management-api/utilities"
+	"shwetaik-expense-management-api/notifications"
 	"time"
 
 	firebase "firebase.google.com/go/v4"
@@ -16,13 +17,17 @@ type ExpenseApprovalsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
 	deviceTokenRepo  *DeviceTokenRepo
+	notifier         *notifier
 }
 
 func NewExpenseApprovalsRepo(db *gorm.DB, firebaeApp *firebase.App) *ExpenseApprovalsRepo {
+	notificationRepo := NewNotificationRepo(db, firebaeApp)
+	deviceTokenRepo := NewDeviceTokenRepo(db)
 	return &ExpenseApprovalsRepo{
 		db:               db,
-		notificationRepo: NewNotificationRepo(db, firebaeApp),
-		deviceTokenRepo:  NewDeviceTokenRepo(db),
+		notificationRepo: notificationRepo,
+		deviceTokenRepo:  deviceTokenRepo,
+		notifier:         newNotifier(notificationRepo, deviceTokenRepo),
 	}
 }
 
@@ -42,11 +47,13 @@ func (r *ExpenseApprovalsRepo) GetExpenseApprovalsByApproverID(approverID uint) 
 	return expenseApprovals
 }
 
-func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *models.ExpenseApprovals) error {
+func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *models.ExpenseApprovals) (err error) {
 	tx := r.db.Begin()
 	defer func() {
-		if r := recover(); r != nil {
+		if rec := recover(); rec != nil {
 			_ = tx.Rollback()
+			err = fmt.Errorf("internal error in UpdateExpenseApproval: %v", rec)
+			log.Printf("PANIC recovered in UpdateExpenseApproval: %v", rec)
 		}
 	}()
 
@@ -108,13 +115,20 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 		expenseRequest.Status = "rejected"
 		expenseRequest.CurrentApproverLevel = expenseApprovalToUpdate.Level
 
+		// Comments is nullable: a rejection may legitimately arrive without one.
+		// Mirrors the guard AdvanceApprovalsRepo already applies.
+		comment := ""
+		if expenseApproval.Comments != nil {
+			comment = *expenseApproval.Comments
+		}
+
 		msg := fmt.Sprintf(
 			"Your expense request (#%d - '%s') has been REJECTED by %s (Level %d). Reason: %s",
 			expenseRequest.ID,
 			expenseDescription,
 			expenseApprovalToUpdate.Users.Name,
 			expenseApprovalToUpdate.Level,
-			*expenseApproval.Comments,
+			comment,
 		)
 
 		r.sendSingleNotification(tx, originalRequestCreatorID, expenseRequest.ID, msg, "rejected")
@@ -127,7 +141,7 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 		if err := tx.Commit().Error; err != nil {
 			return err
 		}
-		broadcastNotificationRemovals(expenseRequest.ID, removedPerUser)
+		notifications.BroadcastRemovals(expenseRequest.ID, removedPerUser)
 		return nil
 	}
 
@@ -183,7 +197,7 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 		var advance models.AdvanceRequests
 		if err := tx.First(&advance, *expenseRequest.AdvanceRequestID).Error; err == nil {
 			if advance.Status == "approved" {
-				settled, serr := advanceFullySettled(tx, &advance)
+				settled, serr := AdvanceFullySettled(tx, &advance)
 				if serr != nil {
 					tx.Rollback()
 					return serr
@@ -207,58 +221,26 @@ func (r *ExpenseApprovalsRepo) UpdateExpenseApproval(id uint, expenseApproval *m
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}
-	broadcastNotificationRemovals(expenseRequest.ID, removedPerUser)
+	notifications.BroadcastRemovals(expenseRequest.ID, removedPerUser)
 	return nil
 }
 
-// broadcastNotificationRemovals fans out realtime WebSocket "remove these
-// notifications" events to every user whose actionable entries were cleared as
-// part of the approval action. Called *after* tx.Commit() so we never announce
-// a removal for changes that got rolled back.
-func broadcastNotificationRemovals(requestID uint, perUser map[uint][]uint) {
-	for userID, ids := range perUser {
-		go utilities.SendWebSocketRemoval(userID, requestID, ids)
-	}
-}
-
+// sendSingleNotification persists a notification inside tx and fans it out.
 func (r *ExpenseApprovalsRepo) sendSingleNotification(
 	tx *gorm.DB,
 	userID uint,
-	expenseID uint,
+	requestID uint,
 	message string,
 	notificationType string,
 ) {
-
-	notification := &models.Notification{
+	r.notifier.dispatchTx(tx, notifications.Notification{
 		UserID:    userID,
-		ExpenseID: expenseID,
+		RequestID: requestID,
 		Message:   message,
 		Type:      notificationType,
-		IsRead:    false,
-	}
-
-	_ = tx.Create(notification).Error
-
-	tokens, err := r.deviceTokenRepo.GetTokensByUserID(userID)
-	if err == nil && len(tokens) > 0 {
-		data := map[string]string{
-			"expenseId": fmt.Sprintf("%d", expenseID),
-			"type":      notificationType,
-		}
-		go r.notificationRepo.SendPushNotification(tokens, "Expense Request", message, data)
-	}
-
-	go utilities.SendWebSocketMessage(
-		userID,
-		utilities.WebSocketMessagePayload{
-			ID:        notification.ID,
-			Message:   message,
-			Type:      notificationType,
-			ExpenseID: expenseID,
-			IsRead:    false,
-			CreatedAt: notification.CreatedAt.Format(time.RFC3339),
-		},
-	)
+		PushTitle: "Expense Request",
+		Kind:      notifications.Expense,
+	})
 }
 
 func (r *ExpenseApprovalsRepo) UpdateExpenseApprovalComment(

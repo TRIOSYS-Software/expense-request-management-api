@@ -26,8 +26,8 @@ func NewProjectController(projectService *services.ProjectService) *ProjectContr
 // @Failure 500 {object} map[string]interface{}
 // @Router /projects/sync [post]
 // @Security JWT Token
-func (c *ProjectController) SyncProjects(ctx echo.Context) error {
-	err := c.projectService.SyncProjects()
+func (pr *ProjectController) SyncProjects(ctx echo.Context) error {
+	err := pr.projectService.SyncProjects()
 	if err != nil {
 		log.Println(err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -49,8 +49,8 @@ func (c *ProjectController) SyncProjects(ctx echo.Context) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /projects [get]
 // @Security JWT Token
-func (c *ProjectController) GetProjects(ctx echo.Context) error {
-	projects, err := c.projectService.GetProjects()
+func (pr *ProjectController) GetProjects(ctx echo.Context) error {
+	projects, err := pr.projectService.GetProjects()
 	if err != nil {
 		log.Println(err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]interface{}{

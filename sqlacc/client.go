@@ -60,10 +60,10 @@ func New(baseURL, token string) *SQLAccClient {
 }
 
 type RequestOpts struct {
-	Timeout time.Duration
+	Timeout     time.Duration
 	MaxAttempts int
 	RetryWrites bool
-	Query url.Values
+	Query       url.Values
 }
 
 func (c *SQLAccClient) Get(ctx context.Context, path string, query url.Values) (*http.Response, error) {

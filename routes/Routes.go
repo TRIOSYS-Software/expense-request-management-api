@@ -5,13 +5,14 @@ import (
 	"shwetaik-expense-management-api/middlewares"
 	"shwetaik-expense-management-api/repositories"
 	"shwetaik-expense-management-api/services"
+	"shwetaik-expense-management-api/storage"
 
 	firebase "firebase.google.com/go/v4"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
 
-func InitialRoute(e *echo.Echo, db *gorm.DB, firebaseApp *firebase.App) {
+func InitialRoute(e *echo.Echo, db *gorm.DB, firebaseApp *firebase.App, uploadDir string) {
 	apiV1 := e.Group("/api/v1")
 
 	initUsersRoutes(apiV1, db)
@@ -20,9 +21,9 @@ func InitialRoute(e *echo.Echo, db *gorm.DB, firebaseApp *firebase.App) {
 	initPermissionsRoutes(apiV1, db)
 	initApprovalPoliciesRoutes(apiV1, db)
 	initExpenseCategoriesRoutes(apiV1, db)
-	initExpenseRequestsRoutes(apiV1, db, firebaseApp)
+	initExpenseRequestsRoutes(apiV1, db, firebaseApp, uploadDir)
 	initExpenseApprovalsRoutes(apiV1, db, firebaseApp)
-	initAdvanceRequestsRoutes(apiV1, db, firebaseApp)
+	initAdvanceRequestsRoutes(apiV1, db, firebaseApp, uploadDir)
 	initAdvanceApprovalsRoutes(apiV1, db, firebaseApp)
 	initNotificationRoutes(apiV1, db, firebaseApp)
 	initPaymentMethodsRoutes(apiV1, db)
@@ -131,10 +132,11 @@ func initExpenseCategoriesRoutes(e *echo.Group, db *gorm.DB) {
 	e.DELETE("/expense-categories/:id", expenseCategoriesController.DeleteExpenseCategory, middlewares.IsAuthenticated)
 }
 
-func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {
-	expenseRequestsRepo := repositories.NewExpenseRequestsRepo(db, firebaseApp)
+func initExpenseRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App, uploadDir string) {
+	attachments := storage.NewDiskStore(uploadDir)
+	expenseRequestsRepo := repositories.NewExpenseRequestsRepo(db, firebaseApp, attachments)
 	expenseRequestsService := services.NewExpenseRequestsService(expenseRequestsRepo)
-	expenseRequestsController := controllers.NewExpenseRequestsController(expenseRequestsService)
+	expenseRequestsController := controllers.NewExpenseRequestsController(expenseRequestsService, uploadDir)
 	e.GET("/expense-requests", expenseRequestsController.GetExpenseRequests, middlewares.IsAuthenticated)
 	e.POST("/expense-requests", expenseRequestsController.CreateExpenseRequest, middlewares.IsAuthenticated)
 	e.PUT("/expense-requests/:id", expenseRequestsController.UpdateExpenseRequest, middlewares.IsAuthenticated)
@@ -160,10 +162,11 @@ func initExpenseApprovalsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebas
 	e.GET("/expense-approvals/approver/:approver_id", expenseApprovalsController.GetExpenseApprovalsByApproverID, middlewares.IsAuthenticated)
 }
 
-func initAdvanceRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App) {
-	advanceRequestsRepo := repositories.NewAdvanceRequestsRepo(db, firebaseApp)
+func initAdvanceRequestsRoutes(e *echo.Group, db *gorm.DB, firebaseApp *firebase.App, uploadDir string) {
+	attachments := storage.NewDiskStore(uploadDir)
+	advanceRequestsRepo := repositories.NewAdvanceRequestsRepo(db, firebaseApp, attachments)
 	advanceRequestsService := services.NewAdvanceRequestsService(advanceRequestsRepo)
-	advanceRequestsController := controllers.NewAdvanceRequestsController(advanceRequestsService)
+	advanceRequestsController := controllers.NewAdvanceRequestsController(advanceRequestsService, uploadDir)
 	e.GET("/advance-requests", advanceRequestsController.GetAdvanceRequests, middlewares.IsAuthenticated)
 	e.POST("/advance-requests", advanceRequestsController.CreateAdvanceRequest, middlewares.IsAuthenticated)
 	e.PUT("/advance-requests/:id", advanceRequestsController.UpdateAdvanceRequest, middlewares.IsAuthenticated)
@@ -207,10 +210,6 @@ func initPaymentMethodsRoutes(e *echo.Group, db *gorm.DB) {
 	paymentMethodController := controllers.NewPaymentMethodController(paymentMethodService)
 	e.POST("/payment-methods/sync", paymentMethodController.SyncPaymentMethods, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "payment-method", "sync-payment-methods"))
 	e.GET("/payment-methods", paymentMethodController.GetPaymentMethods, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "payment-method", "view-payment-methods"))
-
-	go func() {
-		_ = paymentMethodService.SyncPaymentMethods()
-	}()
 }
 
 func initProjectsRoutes(e *echo.Group, db *gorm.DB) {
@@ -219,10 +218,6 @@ func initProjectsRoutes(e *echo.Group, db *gorm.DB) {
 	projectController := controllers.NewProjectController(projectService)
 	e.POST("/projects/sync", projectController.SyncProjects, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "project", "sync-projects"))
 	e.GET("/projects", projectController.GetProjects, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "project", "view-projects"))
-
-	go func() {
-		_ = projectService.SyncProjects()
-	}()
 }
 
 func initGLAccRoutes(e *echo.Group, db *gorm.DB) {
@@ -231,10 +226,6 @@ func initGLAccRoutes(e *echo.Group, db *gorm.DB) {
 	glAccController := controllers.NewGLAccController(glAccService)
 	e.GET("/gl-acc", glAccController.GetGLAcc, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "gl-account", "view-gl-accounts"))
 	e.POST("/gl-acc/sync", glAccController.SyncGLAcc, middlewares.IsAuthenticated, middlewares.RequirePermission(db, "gl-account", "sync-gl-accounts"))
-
-	go func() {
-		_ = glAccService.SyncGLAcc()
-	}()
 }
 
 func initWebsocketRoutes(e *echo.Echo) {
@@ -249,4 +240,22 @@ func initDeviceTokenRoutes(e *echo.Group, db *gorm.DB) {
 	e.GET("/users/:id/device-tokens", deviceTokenController.GetTokensByUserID, middlewares.IsAuthenticated)
 	e.POST("/users/:id/device-tokens", deviceTokenController.CreateTokenByUserID)
 	e.DELETE("/device-tokens/:token", deviceTokenController.DeleteToken)
+}
+
+// StartBackgroundSync warms the local caches of the SQLACC lookup tables
+// (payment methods, projects, GL accounts) once at boot.
+//
+// These previously ran as `go func()` side effects of route registration, which
+// made InitialRoute do network I/O and left the syncs impossible to disable or
+// sequence. They are now started explicitly by main, after the routes are wired.
+//
+// Each sync logs its own outcome, so the errors are deliberately discarded here.
+func StartBackgroundSync(db *gorm.DB) {
+	paymentMethodService := services.NewPaymentMethodService(repositories.NewPaymentMethodRepo(db))
+	projectService := services.NewProjectService(repositories.NewProjectRepo(db))
+	glAccService := services.NewGLAccService(repositories.NewGLAccRepo(db))
+
+	go func() { _ = paymentMethodService.SyncPaymentMethods() }()
+	go func() { _ = projectService.SyncProjects() }()
+	go func() { _ = glAccService.SyncGLAcc() }()
 }

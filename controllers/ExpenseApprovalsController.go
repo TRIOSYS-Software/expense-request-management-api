@@ -1,8 +1,8 @@
 package controllers
 
 import (
-	"fmt"
 	"net/http"
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
 	"strconv"
@@ -18,18 +18,18 @@ func NewExpenseApprovalsController(ExpenseApprovalsService *services.ExpenseAppr
 	return &ExpenseApprovalsController{ExpenseApprovalsService: ExpenseApprovalsService}
 }
 
-func (controller *ExpenseApprovalsController) GetExpenseApprovals(c echo.Context) error {
-	ExpenseApprovals := controller.ExpenseApprovalsService.GetExpenseApprovals()
+func (ea *ExpenseApprovalsController) GetExpenseApprovals(c echo.Context) error {
+	ExpenseApprovals := ea.ExpenseApprovalsService.GetExpenseApprovals()
 	return c.JSON(200, &ExpenseApprovals)
 }
 
-func (con *ExpenseApprovalsController) GetExpenseApprovalsByApproverID(c echo.Context) error {
+func (ea *ExpenseApprovalsController) GetExpenseApprovalsByApproverID(c echo.Context) error {
 	approverID := c.Param("approver_id")
 	id, err := strconv.Atoi(approverID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
-	ExpenseApprovals := con.ExpenseApprovalsService.GetExpenseApprovalsByApproverID(uint(id))
+	ExpenseApprovals := ea.ExpenseApprovalsService.GetExpenseApprovalsByApproverID(uint(id))
 	return c.JSON(200, &ExpenseApprovals)
 }
 
@@ -46,7 +46,7 @@ func (con *ExpenseApprovalsController) GetExpenseApprovalsByApproverID(c echo.Co
 // @Failure 404 {object} string
 // @Router /expense-approvals/{id} [put]
 // @Security JWT Token
-func (con *ExpenseApprovalsController) UpdateExpenseApproval(c echo.Context) error {
+func (ea *ExpenseApprovalsController) UpdateExpenseApproval(c echo.Context) error {
 	id := c.Param("id")
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
@@ -56,15 +56,10 @@ func (con *ExpenseApprovalsController) UpdateExpenseApproval(c echo.Context) err
 	if err := c.Bind(ExpenseApprovals); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
-	fmt.Println(ExpenseApprovals)
-	if err := con.ExpenseApprovalsService.UpdateExpenseApproval(uint(idInt), ExpenseApprovals); err != nil {
+	if err := ea.ExpenseApprovalsService.UpdateExpenseApproval(uint(idInt), ExpenseApprovals); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, ExpenseApprovals)
-}
-
-type UpdateExpenseApprovalCommentDTO struct {
-	Comments string `json:"comments"`
 }
 
 // UpdateExpenseApprovalComment update a expense approval comment
@@ -80,18 +75,18 @@ type UpdateExpenseApprovalCommentDTO struct {
 // @Failure 404 {object} string
 // @Router /approvals/{id}/comment [put]
 // @Security JWT Token
-func (con *ExpenseApprovalsController) UpdateExpenseApprovalComment(c echo.Context) error {
+func (ea *ExpenseApprovalsController) UpdateExpenseApprovalComment(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 
-	var dto UpdateExpenseApprovalCommentDTO
+	var dto dtos.UpdateExpenseApprovalCommentDTO
 	if err := c.Bind(&dto); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 
-	if err := con.ExpenseApprovalsService.UpdateExpenseApprovalComment(
+	if err := ea.ExpenseApprovalsService.UpdateExpenseApprovalComment(
 		uint(id),
 		dto.Comments,
 	); err != nil {

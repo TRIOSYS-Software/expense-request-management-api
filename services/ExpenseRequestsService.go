@@ -2,17 +2,12 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"strings"
 	"time"
 
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
-	"shwetaik-expense-management-api/sqlacc"
 )
 
 type ExpenseRequestsService struct {
@@ -43,16 +38,55 @@ func (s *ExpenseRequestsService) GetAnalytics(filters map[string]any) (dtos.Anal
 	return s.ExpenseRequestsRepo.GetAnalytics(filters)
 }
 
+// CreateExpenseRequest validates the advance link and creates the request in a
+// single transaction, then dispatches notifications once it has committed.
+//
+// The validation runs inside the transaction on purpose: it reads the advance's
+// remaining balance, and a check made outside would let two concurrent expenses
+// both pass and both commit, overdrawing the advance.
 func (s *ExpenseRequestsService) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
-	return s.ExpenseRequestsRepo.CreateExpenseRequest(expenseRequest)
+	var pending []repositories.PendingNotification
+
+	err := s.ExpenseRequestsRepo.WithTx(func(tx *repositories.ExpenseRequestsRepo) error {
+		if err := ValidateAdvanceLink(tx, expenseRequest, nil); err != nil {
+			return err
+		}
+		var createErr error
+		pending, createErr = createExpenseWithChain(tx, expenseRequest)
+		return createErr
+	})
+	if err != nil {
+		return err
+	}
+
+	s.ExpenseRequestsRepo.NotifyNewRequest(expenseRequest.ID, pending)
+	return nil
 }
 
 func (s *ExpenseRequestsService) GetExpenseRequestByApproverID(id uint, filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
 	return s.ExpenseRequestsRepo.GetExpenseRequestByApproverID(id, filter)
 }
 
+// UpdateExpenseRequest validates the advance link and applies the update in one
+// transaction, so the balance check and the write cannot disagree.
 func (s *ExpenseRequestsService) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {
-	return s.ExpenseRequestsRepo.UpdateExpenseRequest(id, expenseRequest)
+	return s.ExpenseRequestsRepo.WithTx(func(tx *repositories.ExpenseRequestsRepo) error {
+		existing, err := tx.GetExpenseRequestForUpdate(id)
+		if err != nil {
+			return err
+		}
+
+		// The update form may omit user_id; carry it forward so ownership checks
+		// validate against the row's real owner. Excluding the row from its own
+		// balance means raising an expense that already consumed the advance still
+		// validates.
+		expenseRequest.UserID = existing.UserID
+		if err := ValidateAdvanceLink(tx, expenseRequest, &existing.ID); err != nil {
+			return err
+		}
+
+		return tx.UpdateExpenseRequestTx(id, expenseRequest)
+	})
 }
 
 func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
@@ -72,7 +106,16 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	if err := sendPaymentVoucher(ctx, expenseRequest); err != nil {
+	voucher := voucherRequest{
+		ID:                       expenseRequest.ID,
+		Description:              expenseRequest.Description,
+		Project:                  expenseRequest.Project,
+		Amount:                   expenseRequest.Amount,
+		PaymentMethod:            expenseRequest.PaymentMethod,
+		PaymentMethodDescription: expenseRequest.PaymentMethods.DESCRIPTION,
+		GLAccountCode:            expenseRequest.GLAccounts.CODE,
+	}
+	if err := sendVoucher(ctx, voucher, docTypeExpense, "ER"); err != nil {
 		return err
 	}
 	return s.ExpenseRequestsRepo.UpdateSendToSQLACCStatus(expenseRequest.ID, true)
@@ -80,70 +123,6 @@ func (s *ExpenseRequestsService) SendExpenseRequestToSQLACC(id uint) error {
 
 func (s *ExpenseRequestsService) CompleteExpenseRequest(id uint, actorUserID uint, comment *string) error {
 	return s.ExpenseRequestsRepo.CompleteExpenseRequest(id, actorUserID, comment)
-}
-
-func sendPaymentVoucher(ctx context.Context, er *models.ExpenseRequests) error {
-	body, err := json.Marshal(buildPaymentVoucherPayload(er))
-	if err != nil {
-		return err
-	}
-
-	resp, err := sqlacc.Default().Post(ctx, "/payment-vouchers/direct", body)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		snippet := readBodySnippet(resp.Body, 1024)
-		log.Printf("[send-to-sqlacc] ER id=%d payment-vouchers POST -> %d body=%s payload=%s",
-			er.ID, resp.StatusCode, snippet, string(body))
-		return fmt.Errorf("payment-vouchers POST failed: status %d body=%s", resp.StatusCode, snippet)
-	}
-	return nil
-}
-
-func readBodySnippet(r io.Reader, max int) string {
-	if r == nil {
-		return ""
-	}
-	buf, err := io.ReadAll(io.LimitReader(r, int64(max)))
-	if err != nil {
-		return fmt.Sprintf("<read err: %v>", err)
-	}
-	s := strings.TrimSpace(string(buf))
-	if s == "" {
-		return "<empty>"
-	}
-	return s
-}
-
-func buildPaymentVoucherPayload(er *models.ExpenseRequests) map[string]any {
-	return map[string]any{
-		"docno":         expenseRequestDocNo(er.PaymentMethods.DESCRIPTION, er.ID),
-		"docdate":       time.Now().Format("2006-01-02"),
-		"paymentmethod": er.PaymentMethod,
-		"description":   er.Description,
-		"project":       er.Project,
-		"docamt":        er.Amount,
-		"sdsdocdetail": []map[string]any{
-			{
-				"code":        er.GLAccounts.CODE,
-				"description": er.Description,
-				"amount":      er.Amount,
-				"project":     er.Project,
-			},
-		},
-	}
-}
-
-func expenseRequestDocNo(paymentMethodDescription string, id uint) string {
-	desc := strings.ToLower(paymentMethodDescription)
-	if strings.Contains(desc, "bank") {
-		return fmt.Sprintf("APP-B-PV-%d", id)
-
-	}
-	return fmt.Sprintf("APP-C-PV-%d", id)
 }
 
 func (s *ExpenseRequestsService) DeleteExpenseRequest(id uint) error {

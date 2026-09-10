@@ -16,27 +16,27 @@ func NewApproversController(approversService *services.ApproversService) *Approv
 	return &ApproversController{ApproversService: approversService}
 }
 
-func (a *ApproversController) GetApprovers(c echo.Context) error {
-	users, err := a.ApproversService.GetApprovers()
+func (apr *ApproversController) GetApprovers(c echo.Context) error {
+	users, err := apr.ApproversService.GetApprovers()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }
 
-func (a *ApproversController) GetApproverByID(c echo.Context) error {
+func (apr *ApproversController) GetApproverByID(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid approver id"})
 	}
-	user, err := a.ApproversService.GetApproverByID(uint(id))
+	user, err := apr.ApproversService.GetApproverByID(uint(id))
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, user)
 }
 
-func (a *ApproversController) GetApproverActions(c echo.Context) error {
+func (apr *ApproversController) GetApproverActions(c echo.Context) error {
 	approverID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid approver id"})
@@ -50,7 +50,7 @@ func (a *ApproversController) GetApproverActions(c echo.Context) error {
 	viewerID := uint(viewerIDRaw.(float64))
 	viewerRoleID := uint(viewerRoleRaw.(float64))
 
-	actions, err := a.ApproversService.GetApproverActions(uint(approverID), viewerRoleID, viewerID)
+	actions, err := apr.ApproversService.GetApproverActions(uint(approverID), viewerRoleID, viewerID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}

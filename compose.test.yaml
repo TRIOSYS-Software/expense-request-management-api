@@ -1,0 +1,18 @@
+services:
+  db_test:
+    image: mysql:8.0-debian
+    platform: linux/x86_64
+    environment:
+      MYSQL_DATABASE: expense_test
+      MYSQL_ROOT_PASSWORD: testpassword
+    ports:
+      - "3307:3306"
+    tmpfs:
+      - /var/lib/mysql
+    command: --sql-mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ptestpassword"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 15s

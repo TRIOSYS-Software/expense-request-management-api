@@ -6,13 +6,13 @@ import (
 )
 
 type RolesService struct {
-	RolesRepo *repositories.RolesRepo
+	RolesRepo       *repositories.RolesRepo
 	PermissionsRepo *repositories.PermissionsRepo
 }
 
 func NewRolesService(RoleRepo *repositories.RolesRepo, permRepo *repositories.PermissionsRepo) *RolesService {
 	return &RolesService{
-		RolesRepo: RoleRepo,
+		RolesRepo:       RoleRepo,
 		PermissionsRepo: permRepo,
 	}
 }

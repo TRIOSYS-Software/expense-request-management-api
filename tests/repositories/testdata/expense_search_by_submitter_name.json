@@ -1,0 +1,13 @@
+{
+  "total": 2,
+  "pending": 1,
+  "approved": 0,
+  "rejected": 0,
+  "completed": 1,
+  "total_amount": 575,
+  "approved_amount": 0,
+  "pending_amount": 75,
+  "completed_amount": 500,
+  "advance_used_amount": 0,
+  "daily_totals": null
+}

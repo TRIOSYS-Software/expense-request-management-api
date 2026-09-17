@@ -51,9 +51,9 @@ func applyFilters(db *gorm.DB, filter *dtos.ExpenseRequestFilterDTO) *gorm.DB {
 			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = expense_requests.project")
 		searchPattern := "%" + filter.Search + "%"
 		if idVal, err := strconv.Atoi(filter.Search); err == nil {
-			db = db.Where("(expense_requests.id = ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, searchPattern, searchPattern, searchPattern)
+			db = db.Where("(expense_requests.id = ? OR expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, searchPattern, searchPattern, searchPattern, searchPattern)
 		} else {
-			db = db.Where("(search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", searchPattern, searchPattern, searchPattern)
+			db = db.Where("(expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", searchPattern, searchPattern, searchPattern, searchPattern)
 		}
 	}
 	if filter.MinAmount != nil {
@@ -200,9 +200,9 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) 
 			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = expense_requests.project")
 		pattern := "%" + search + "%"
 		if idVal, err := strconv.Atoi(search); err == nil {
-			db = db.Where("(expense_requests.id = ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, pattern, pattern, pattern)
+			db = db.Where("(expense_requests.id = ? OR expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, pattern, pattern, pattern, pattern)
 		} else {
-			db = db.Where("(search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", pattern, pattern, pattern)
+			db = db.Where("(expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", pattern, pattern, pattern, pattern)
 		}
 	}
 

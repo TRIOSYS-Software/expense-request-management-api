@@ -1,6 +1,7 @@
 package services
 
 import (
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
 )
@@ -21,7 +22,7 @@ func (s *ApproversService) GetApproverByID(id uint) (*models.Users, error) {
 	return s.ApproversRepo.GetApproverByID(id)
 }
 
-func (s *ApproversService) GetApproverActions(approverID, viewerRoleID, viewerID uint) (repositories.ApproverActionsResult, error) {
+func (s *ApproversService) GetApproverActions(approverID, viewerRoleID, viewerID uint) (dtos.ApproverActionsResult, error) {
 	viewerIsAdmin := s.ApproversRepo.IsRoleAdmin(viewerRoleID)
 	return s.ApproversRepo.GetApproverActionsForViewer(approverID, viewerID, viewerIsAdmin)
 }

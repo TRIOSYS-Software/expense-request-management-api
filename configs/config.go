@@ -1,21 +1,15 @@
 package configs
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
-	helper "shwetaik-expense-management-api/Helper"
-	"shwetaik-expense-management-api/models"
+	"github.com/joho/godotenv"
 
 	firebase "firebase.google.com/go/v4"
-	"google.golang.org/api/option"
-
-	"github.com/joho/godotenv"
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -42,16 +36,30 @@ type Config struct {
 	UploadDir           string
 }
 
+var requiredEnv = []string{
+	"DB_PASSWORD", "JWT_SECRET",
+	"SQLACC_API_ENDPOINT", "SQLACC_API_TOKEN",
+	"EMAIL_USERNAME", "EMAIL_PASSWORD", "SMTP_HOST",
+}
+
 func getEnvOrDefault(env string, defaultValue string) string {
-	value := os.Getenv(env)
-	if value == "" {
-		if defaultValue != "" {
-			return defaultValue
-		} else {
-			panic("Environment variable " + env + " is not set")
+	if value := os.Getenv(env); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func Validate() error {
+	var missing []string
+	for _, name := range requiredEnv {
+		if os.Getenv(name) == "" {
+			missing = append(missing, name)
 		}
 	}
-	return value
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func loadEnv(env string) *Config {
@@ -102,264 +110,6 @@ func initUploadDir() string {
 
 	log.Printf("Warning: Could not determine upload directory, using relative path\n")
 	return "uploads"
-}
-
-func (c *Config) ConnectDB() error {
-	dsn := c.DBUser + ":" + c.DBPassword + "@tcp(" + c.DBHost + ":" + c.DBPort + ")/" + c.DBName + "?charset=utf8mb4&parseTime=True&loc=Local"
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return err
-	}
-
-	c.DB = db
-	return nil
-}
-
-func (c *Config) SetupFirebase() error {
-	credPath := os.Getenv("FIREBASE_CREDENTIALS_PATH")
-	if credPath == "" {
-		credPath = filepath.Join(".", "fcm_credentials.json")
-	}
-	if _, err := os.Stat(credPath); os.IsNotExist(err) {
-		log.Printf("Firebase credentials file does not exist at path: %s\n", credPath)
-		return err
-	}
-	opt := option.WithCredentialsFile(credPath)
-	app, err := firebase.NewApp(context.Background(), nil, opt)
-
-	if err != nil {
-		log.Printf("error initializing Firebase app: %v\n", err)
-		return err
-	}
-	log.Printf("Firebase app initialized: %+v\n", app)
-	log.Printf("Option data: %+v\n", opt)
-	c.FirebaseApp = app
-	return nil
-}
-
-func (c *Config) InitializedDB() {
-	c.DB.AutoMigrate(
-		&models.Users{},
-		&models.ExpenseRequests{},
-		&models.ExpenseRequestAttachments{},
-		&models.ExpenseItems{},
-		&models.ApprovalPolicies{},
-		&models.ExpenseApprovals{},
-		&models.AdvanceRequests{},
-		&models.AdvanceRequestAttachments{},
-		&models.AdvanceApprovals{},
-		&models.Roles{},
-		&models.Permissions{},
-		&models.Departments{},
-		&models.ExpenseCategories{},
-		&models.ApprovalPoliciesUsers{},
-		&models.ApprovalPolicyGLAccount{},
-		&models.PaymentMethod{},
-		&models.Project{},
-		&models.GLAcc{},
-		&models.PasswordReset{},
-		&models.Notification{},
-		&models.DeviceToken{},
-	)
-
-	c.DB.Exec("ALTER TABLE approval_policies DROP COLUMN IF EXISTS gl_account_id")
-
-	// Backfill: legacy approval_policies rows have NULL/empty policy_type — pin to 'expense'.
-	c.DB.Exec("UPDATE approval_policies SET policy_type = 'expense' WHERE policy_type IS NULL OR policy_type = ''")
-
-	// Extend advance_requests.status enum with 'closed' if the column is still on the old
-	// value set
-	var advanceStatusType string
-	c.DB.Raw(`
-		SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = DATABASE()
-		  AND TABLE_NAME = 'advance_requests'
-		  AND COLUMN_NAME = 'status'
-	`).Scan(&advanceStatusType)
-	if advanceStatusType != "" && !strings.Contains(advanceStatusType, "'closed'") {
-		if err := c.DB.Exec(`
-			ALTER TABLE advance_requests
-			MODIFY COLUMN status ENUM('pending','approved','rejected','completed','closed')
-			NOT NULL DEFAULT 'pending'
-		`).Error; err != nil {
-			log.Printf("Failed to extend advance_requests.status enum: %v", err)
-		} else {
-			fmt.Println("✅ advance_requests.status enum extended with 'closed'")
-		}
-	}
-
-	var expenseStatusType string
-	c.DB.Raw(`
-		SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = DATABASE()
-		  AND TABLE_NAME = 'expense_requests'
-		  AND COLUMN_NAME = 'status'
-	`).Scan(&expenseStatusType)
-	if expenseStatusType != "" && !strings.Contains(expenseStatusType, "'completed'") {
-		if err := c.DB.Exec(`
-			ALTER TABLE expense_requests
-			MODIFY COLUMN status ENUM('pending','approved','rejected','completed')
-			NOT NULL DEFAULT 'pending'
-		`).Error; err != nil {
-			log.Printf("Failed to extend expense_requests.status enum: %v", err)
-		} else {
-			fmt.Println("✅ expense_requests.status enum extended with 'completed'")
-		}
-	}
-
-	if err := SeedPermissions(c.DB); err != nil {
-		log.Fatalf("Failed to seed permissions: %v", err)
-	}
-
-	roles := []models.Roles{
-		{Name: "Admin", Description: "Admin with full privileges", IsAdmin: true},
-	}
-
-	for _, role := range roles {
-		var existing models.Roles
-		if err := c.DB.Where("name = ?", role.Name).First(&existing).Error; err == gorm.ErrRecordNotFound {
-			c.DB.Create(&role)
-			fmt.Printf("✅ Seeded role: %s\n", role.Name)
-		}
-	}
-
-	var adminRole models.Roles
-	c.DB.Where("name = ?", "Admin").First(&adminRole)
-
-	var allPerms []models.Permissions
-	c.DB.Where("NOT (entity IN ? AND action = ?)", []string{"expense-request", "advance-request"}, "create").Find(&allPerms)
-
-	if err := c.DB.Model(&adminRole).Association("Permissions").Replace(allPerms); err != nil {
-		log.Fatalf("Failed to assign permissions to Admin: %v", err)
-	}
-
-	fmt.Println("✅ All permissions assigned to Admin role")
-
-	var count int64
-	c.DB.Model(&models.Users{}).Where("email = ?", "admin@example.com").Count(&count)
-	if count == 0 {
-		adminUser := models.Users{
-			Name:   "Admin",
-			Email:  "admin@example.com",
-			RoleID: adminRole.ID,
-		}
-
-		hashPassword, err := helper.HashPassword("admin")
-		if err != nil {
-			panic(err)
-		}
-		adminUser.Password = hashPassword
-		c.DB.Create(&adminUser)
-
-		fmt.Println("✅ Default admin user created")
-	}
-}
-
-func SeedPermissions(db *gorm.DB) error {
-	permissions := []models.Permissions{
-		// Dashboard
-		{Name: "Dashboard", Entity: "dashboard", Action: "view", ActionName: "View Dashboard"},
-
-		// Expense Request
-		{Name: "Expense Request", Entity: "expense-request", Action: "view", ActionName: "View Expense Requests"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "create", ActionName: "Create Expense Request"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "update", ActionName: "Update Expense Request"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "delete", ActionName: "Delete Expense Request"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "soft-delete", ActionName: "Archive Expense Request"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "approve", ActionName: "Approve Expense Request"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "reject", ActionName: "Reject Expense Request"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "send-to-sqlacc", ActionName: "Send To SQL Account"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "complete", ActionName: "Manually Complete Expense Request"},
-		{Name: "Expense Request", Entity: "expense-request", Action: "export", ActionName: "Export Expense Requests"},
-
-		// Advance Request
-		{Name: "Advance Request", Entity: "advance-request", Action: "view", ActionName: "View Advance Requests"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "create", ActionName: "Create Advance Request"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "update", ActionName: "Update Advance Request"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "delete", ActionName: "Delete Advance Request"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "soft-delete", ActionName: "Archive Advance Request"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "approve", ActionName: "Approve Advance Request"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "reject", ActionName: "Reject Advance Request"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "close", ActionName: "Manually Close Advance Request"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "send-to-sqlacc", ActionName: "Send To SQL Account"},
-		{Name: "Advance Request", Entity: "advance-request", Action: "export", ActionName: "Export Advance Requests"},
-
-		// User
-		{Name: "User", Entity: "user", Action: "view", ActionName: "View Users"},
-		{Name: "User", Entity: "user", Action: "create", ActionName: "Create User"},
-		{Name: "User", Entity: "user", Action: "update", ActionName: "Update User"},
-		{Name: "User", Entity: "user", Action: "delete", ActionName: "Delete User"},
-		{Name: "User", Entity: "user", Action: "export", ActionName: "Export Users"},
-
-		// Roles
-		{Name: "Role", Entity: "role", Action: "view", ActionName: "View Roles"},
-		{Name: "Role", Entity: "role", Action: "create", ActionName: "Create Role"},
-		{Name: "Role", Entity: "role", Action: "update", ActionName: "Update Role"},
-		{Name: "Role", Entity: "role", Action: "delete", ActionName: "Delete Role"},
-		{Name: "Role", Entity: "role", Action: "export", ActionName: "Export Roles"},
-
-		// Departments
-		{Name: "Department", Entity: "department", Action: "view", ActionName: "View Departments"},
-		{Name: "Department", Entity: "department", Action: "create", ActionName: "Create Department"},
-		{Name: "Department", Entity: "department", Action: "update", ActionName: "Update Department"},
-		{Name: "Department", Entity: "department", Action: "delete", ActionName: "Delete Department"},
-		{Name: "Department", Entity: "department", Action: "export", ActionName: "Export Departments"},
-
-		// Policies
-		{Name: "Policy", Entity: "policy", Action: "view", ActionName: "View Policies"},
-		{Name: "Policy", Entity: "policy", Action: "create", ActionName: "Create Policy"},
-		{Name: "Policy", Entity: "policy", Action: "update", ActionName: "Update Policy"},
-		{Name: "Policy", Entity: "policy", Action: "delete", ActionName: "Delete Policy"},
-		{Name: "Policy", Entity: "policy", Action: "export", ActionName: "Export Policies"},
-
-		// GL Accounts
-		{Name: "GL Account", Entity: "gl-account", Action: "view-gl-accounts", ActionName: "View GL Accounts"},
-		{Name: "GL Account", Entity: "gl-account", Action: "sync-gl-accounts", ActionName: "Sync GL Accounts"},
-		{Name: "GL Account", Entity: "gl-account", Action: "export-gl-accounts", ActionName: "Export GL Accounts"},
-		{Name: "GL Account", Entity: "gl-account", Action: "view-assigned-gl-accounts", ActionName: "View Assigned GL Accounts"},
-		{Name: "GL Account", Entity: "gl-account", Action: "create-assign-gl-account", ActionName: "Create Assigned GL Account"},
-		{Name: "GL Account", Entity: "gl-account", Action: "edit-assigned-gl-account", ActionName: "Edit Assigned GL Account"},
-		{Name: "GL Account", Entity: "gl-account", Action: "delete-assigned-gl-account", ActionName: "Delete Assigned GL Account"},
-		{Name: "GL Account", Entity: "gl-account", Action: "export-assigned-gl-accounts", ActionName: "Export Assigned GL Accounts"},
-
-		// Payment Methods
-		{Name: "Payment Method", Entity: "payment-method", Action: "view-payment-methods", ActionName: "View Payment Methods"},
-		{Name: "Payment Method", Entity: "payment-method", Action: "sync-payment-methods", ActionName: "Sync Payment Methods"},
-		{Name: "Payment Method", Entity: "payment-method", Action: "export-payment-methods", ActionName: "Export Payment Methods"},
-		{Name: "Payment Method", Entity: "payment-method", Action: "view-assigned-payment-methods", ActionName: "View Assigned Payment Methods"},
-		{Name: "Payment Method", Entity: "payment-method", Action: "create-assign-payment-method", ActionName: "Create Assigned Payment Method"},
-		{Name: "Payment Method", Entity: "payment-method", Action: "edit-assigned-payment-method", ActionName: "Edit Assigned Payment Method"},
-		{Name: "Payment Method", Entity: "payment-method", Action: "delete-assigned-payment-method", ActionName: "Delete Assigned Payment Method"},
-		{Name: "Payment Method", Entity: "payment-method", Action: "export-assigned-payment-methods", ActionName: "Export Assigned Payment Methods"},
-
-		// Projects
-		{Name: "Project", Entity: "project", Action: "view-projects", ActionName: "View Projects"},
-		{Name: "Project", Entity: "project", Action: "sync-projects", ActionName: "Sync Projects"},
-		{Name: "Project", Entity: "project", Action: "export-projects", ActionName: "Export Projects"},
-		{Name: "Project", Entity: "project", Action: "view-assigned-projects", ActionName: "View Assigned Projects"},
-		{Name: "Project", Entity: "project", Action: "create-assign-project", ActionName: "Create Assigned Project"},
-		{Name: "Project", Entity: "project", Action: "edit-assigned-project", ActionName: "Edit Assigned Project"},
-		{Name: "Project", Entity: "project", Action: "delete-assigned-project", ActionName: "Delete Assigned Project"},
-		{Name: "Project", Entity: "project", Action: "export-assigned-projects", ActionName: "Export Assigned Projects"},
-
-		// Approver List
-		{Name: "Approver List", Entity: "approver-list", Action: "view", ActionName: "View Approver List"},
-		{Name: "Approver List", Entity: "approver-list", Action: "export", ActionName: "Export Approver List"},
-	}
-
-	for _, perm := range permissions {
-		var existing models.Permissions
-		err := db.Where("entity = ? AND action = ?", perm.Entity, perm.Action).First(&existing).Error
-		if err == gorm.ErrRecordNotFound {
-			if err := db.Create(&perm).Error; err != nil {
-				return fmt.Errorf("failed to seed permission %s:%s: %v", perm.Entity, perm.Action, err)
-			}
-			fmt.Printf("✅ Seeded permission: %s:%s\n", perm.Entity, perm.Action)
-		}
-	}
-
-	fmt.Println("✅ All permissions seeded successfully.")
-	return nil
 }
 
 var Envs = loadEnv(".env")

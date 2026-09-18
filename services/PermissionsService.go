@@ -16,8 +16,3 @@ func NewPermissionsService(repo *repositories.PermissionsRepo) *PermissionsServi
 func (s *PermissionsService) GetAll() ([]models.Permissions, error) {
 	return s.Repo.GetAll()
 }
-
-func (s *PermissionsService) HasPermission(roleID uint, entity, action string) (bool, error) {
-	return s.Repo.HasPermission(roleID, entity, action)
-}
-

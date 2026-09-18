@@ -18,14 +18,14 @@ func NewDeviceTokenController(service *services.DeviceTokenService) *DeviceToken
 }
 
 // GET /users/:id/device-tokens
-func (c *DeviceTokenController) GetTokensByUserID(ctx echo.Context) error {
+func (dt *DeviceTokenController) GetTokensByUserID(ctx echo.Context) error {
 	userIDParam := ctx.Param("id")
 	userID, err := strconv.ParseUint(userIDParam, 10, 32)
 	if err != nil {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
 	}
 
-	tokens, err := c.service.GetTokensByUserID(uint(userID))
+	tokens, err := dt.service.GetTokensByUserID(uint(userID))
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -38,7 +38,7 @@ func (c *DeviceTokenController) GetTokensByUserID(ctx echo.Context) error {
 }
 
 // POST /users/:id/device-tokens
-func (c *DeviceTokenController) CreateTokenByUserID(ctx echo.Context) error {
+func (dt *DeviceTokenController) CreateTokenByUserID(ctx echo.Context) error {
 	userIDParam := ctx.Param("id")
 	userID, err := strconv.ParseUint(userIDParam, 10, 32)
 	if err != nil {
@@ -52,7 +52,7 @@ func (c *DeviceTokenController) CreateTokenByUserID(ctx echo.Context) error {
 
 	req.UserID = uint(userID)
 
-	deviceToken, err := c.service.CreateTokenByUserID(req.UserID, req.Token, req.DeviceOS)
+	deviceToken, err := dt.service.CreateTokenByUserID(req.UserID, req.Token, req.DeviceOS)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -60,13 +60,13 @@ func (c *DeviceTokenController) CreateTokenByUserID(ctx echo.Context) error {
 	return ctx.JSON(http.StatusCreated, deviceToken)
 }
 
-func (c *DeviceTokenController) DeleteToken(ctx echo.Context) error {
+func (dt *DeviceTokenController) DeleteToken(ctx echo.Context) error {
 	token := ctx.Param("token")
 	if token == "" {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Missing token"})
 	}
 
-	if err := c.service.DeleteToken(token); err != nil {
+	if err := dt.service.DeleteToken(token); err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 

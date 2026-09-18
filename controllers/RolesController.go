@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 )
+
 type CreateRoleRequest struct {
 	Name          string `json:"name" validate:"required"`
 	Description   string `json:"description"`
@@ -63,7 +64,7 @@ func (r *RolesController) CreateRole(c echo.Context) error {
 	}
 
 	role := &models.Roles{
-		Name: req.Name,
+		Name:        req.Name,
 		Description: req.Description,
 		IsAdmin:     req.IsAdmin,
 	}
@@ -88,12 +89,12 @@ func (r *RolesController) UpdateRole(c echo.Context) error {
 	}
 
 	role := &models.Roles{
-		ID:   uint(id),
-		Name: req.Name,
+		ID:          uint(id),
+		Name:        req.Name,
 		Description: req.Description,
 		IsAdmin:     req.IsAdmin,
 	}
-	
+
 	if err := r.RolesService.UpdateRoleWithPermissions(role, req.PermissionIDs); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}

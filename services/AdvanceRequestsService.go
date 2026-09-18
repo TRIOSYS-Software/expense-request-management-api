@@ -2,16 +2,12 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
-	"strings"
 	"time"
 
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
-	"shwetaik-expense-management-api/sqlacc"
 )
 
 type AdvanceRequestsService struct {
@@ -46,12 +42,28 @@ func (s *AdvanceRequestsService) GetSelectableAdvanceRequests(userID uint) ([]mo
 	return s.AdvanceRequestsRepo.GetSelectableAdvanceRequests(userID)
 }
 
+// CreateAdvanceRequest creates the request and its approval chain in one
+// transaction, dispatching notifications only after it commits.
 func (s *AdvanceRequestsService) CreateAdvanceRequest(advanceRequest *models.AdvanceRequests) error {
-	return s.AdvanceRequestsRepo.CreateAdvanceRequest(advanceRequest)
+	var pending []repositories.PendingNotification
+
+	err := s.AdvanceRequestsRepo.WithTx(func(tx *repositories.AdvanceRequestsRepo) error {
+		var createErr error
+		pending, createErr = createAdvanceWithChain(tx, advanceRequest)
+		return createErr
+	})
+	if err != nil {
+		return err
+	}
+
+	s.AdvanceRequestsRepo.NotifyNewAdvanceRequest(advanceRequest.ID, pending)
+	return nil
 }
 
 func (s *AdvanceRequestsService) UpdateAdvanceRequest(id uint, advanceRequest *models.AdvanceRequests) error {
-	return s.AdvanceRequestsRepo.UpdateAdvanceRequest(id, advanceRequest)
+	return s.AdvanceRequestsRepo.WithTx(func(tx *repositories.AdvanceRequestsRepo) error {
+		return tx.UpdateAdvanceRequestTx(id, advanceRequest)
+	})
 }
 
 func (s *AdvanceRequestsService) DeleteAdvanceRequest(id uint) error {
@@ -66,8 +78,22 @@ func (s *AdvanceRequestsService) CountLinkedExpenseRequests(id uint) (int64, err
 	return s.AdvanceRequestsRepo.CountLinkedExpenseRequests(id)
 }
 
+// CloseAdvanceRequest closes the advance transactionally, then notifies the
+// requester once the close has committed.
 func (s *AdvanceRequestsService) CloseAdvanceRequest(id uint, actorUserID uint, comment *string) error {
-	return s.AdvanceRequestsRepo.CloseAdvanceRequest(id, actorUserID, comment)
+	var pending *repositories.PendingNotification
+
+	err := s.AdvanceRequestsRepo.WithTx(func(tx *repositories.AdvanceRequestsRepo) error {
+		var closeErr error
+		pending, closeErr = tx.CloseAdvanceRequestTx(id, actorUserID, comment)
+		return closeErr
+	})
+	if err != nil {
+		return err
+	}
+
+	s.AdvanceRequestsRepo.NotifyAdvanceClosed(id, pending)
+	return nil
 }
 
 func (s *AdvanceRequestsService) SendAdvanceRequestToSQLACC(id uint) error {
@@ -87,58 +113,17 @@ func (s *AdvanceRequestsService) SendAdvanceRequestToSQLACC(id uint) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	if err := sendAdvancePaymentVoucher(ctx, advance); err != nil {
+	voucher := voucherRequest{
+		ID:                       advance.ID,
+		Description:              advance.Description,
+		Project:                  advance.Project,
+		Amount:                   advance.Amount,
+		PaymentMethod:            advance.PaymentMethod,
+		PaymentMethodDescription: advance.PaymentMethods.DESCRIPTION,
+		GLAccountCode:            advance.GLAccounts.CODE,
+	}
+	if err := sendVoucher(ctx, voucher, docTypeAdvance, "AR"); err != nil {
 		return err
 	}
 	return s.AdvanceRequestsRepo.UpdateSendToSQLACCStatus(advance.ID, true)
-}
-
-func sendAdvancePaymentVoucher(ctx context.Context, ar *models.AdvanceRequests) error {
-	body, err := json.Marshal(buildAdvancePaymentVoucherPayload(ar))
-	if err != nil {
-		return err
-	}
-
-	resp, err := sqlacc.Default().Post(ctx, "/payment-vouchers/direct", body)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		snippet := readBodySnippet(resp.Body, 1024)
-		log.Printf("[send-to-sqlacc] AR id=%d payment-vouchers POST -> %d body=%s payload=%s",
-			ar.ID, resp.StatusCode, snippet, string(body))
-		return fmt.Errorf("payment-vouchers POST failed: status %d body=%s", resp.StatusCode, snippet)
-	}
-	return nil
-}
-
-func buildAdvancePaymentVoucherPayload(ar *models.AdvanceRequests) map[string]any {
-	return map[string]any{
-		"docno":         advanceRequestDocNo(ar.PaymentMethods.DESCRIPTION, ar.ID),
-		"docdate":       time.Now().Format("2006-01-02"),
-		"paymentmethod": ar.PaymentMethod,
-		"description":   ar.Description,
-		"project":       ar.Project,
-		"docamt":        ar.Amount,
-		"sdsdocdetail": []map[string]any{
-			{
-				"code":        ar.GLAccounts.CODE,
-				"description": ar.Description,
-				"amount":      ar.Amount,
-				"project":     ar.Project,
-			},
-		},
-	}
-}
-
-
-func advanceRequestDocNo(paymentMethodDescription string, id uint) string {
-	desc := strings.ToLower(paymentMethodDescription)
-	if strings.Contains(desc, "bank") {
-		return fmt.Sprintf("APP-B-ADV-%d", id)
-
-	}
-	return fmt.Sprintf("APP-C-ADV-%d", id)
 }

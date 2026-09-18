@@ -1,7 +1,6 @@
 package middlewares
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"shwetaik-expense-management-api/configs"
@@ -42,16 +41,6 @@ func IsAuthenticated(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-func IsAdmin(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		userRole := uint(c.Get("user_role").(float64))
-		if userRole != 1 {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		}
-		return next(c)
-	}
-}
-
 func RequirePermission(db *gorm.DB, entity string, action string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -78,8 +67,6 @@ func RequirePermission(db *gorm.DB, entity string, action string) echo.Middlewar
 				Joins("JOIN permissions ON roles_permissions.permissions_id = permissions.id").
 				Where("roles_permissions.roles_id = ? AND permissions.entity = ? AND permissions.action = ?", userRoleID, entity, action).
 				Count(&count).Error
-
-			fmt.Println(err)
 
 			if err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Permission check failed"})

@@ -4,7 +4,6 @@ import (
 	"shwetaik-expense-management-api/models"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type ProjectRepo struct {
@@ -31,37 +30,6 @@ func (r *ProjectRepo) GetProjects() ([]models.Project, error) {
 	return projects, nil
 }
 
-// SaveProjects upserts the supplied set and removes any locally cached rows
-// whose CODE is not in the new set and is not still referenced by a request,
-// an approval policy or a user assignment, all within one transaction.
 func (r *ProjectRepo) SaveProjects(projects []models.Project) (SyncCounts, error) {
-	var counts SyncCounts
-	if len(projects) == 0 {
-		return counts, nil
-	}
-
-	err := r.db.Transaction(func(tx *gorm.DB) error {
-		keep := make([]string, 0, len(projects))
-		for _, p := range projects {
-			keep = append(keep, p.CODE)
-		}
-
-		deleted, retained, err := reconcile(tx, "projects", "CODE", keep, projectRefs)
-		if err != nil {
-			return err
-		}
-		counts.Deleted = deleted
-		counts.Retained = retained
-
-		upRes := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "CODE"}},
-			UpdateAll: true,
-		}).Create(&projects)
-		if upRes.Error != nil {
-			return upRes.Error
-		}
-		counts.Upserted = upRes.RowsAffected
-		return nil
-	})
-	return counts, err
+	return replaceAll(r.db, projects, "projects", "CODE", func(p models.Project) string { return p.CODE }, projectRefs)
 }

@@ -6,13 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// balanceEpsilon is a tiny float tolerance for input-validation comparisons (caps, returned bound).
 const balanceEpsilon = 1e-6
-
-// settledThreshold is the remaining balance (in Kyat) below which an advance is considered fully
-// consumed. Kyat has no sub-unit in practice, so any sub-1 remainder is floating-point dust from
-// MySQL's SUM/LEAST over double columns (e.g. a 1500 == 1500 settlement reporting remaining 0.0019),
-// never a real balance. Anything ≥ 1 is a genuine remainder and keeps the advance open.
 const settledThreshold = 1.0
 
 const consumedSQL = `CASE
@@ -21,7 +15,7 @@ const consumedSQL = `CASE
 		ELSE amount
 	END`
 
-func advanceConsumed(db *gorm.DB, advanceRequestID uint, excludeERID *uint, statuses []string) (float64, error) {
+func AdvanceConsumed(db *gorm.DB, advanceRequestID uint, excludeERID *uint, statuses []string) (float64, error) {
 	q := db.Model(&models.ExpenseRequests{}).
 		Where("advance_request_id = ? AND status IN ?", advanceRequestID, statuses)
 	if excludeERID != nil {
@@ -37,8 +31,8 @@ func advanceConsumed(db *gorm.DB, advanceRequestID uint, excludeERID *uint, stat
 	return *consumed, nil
 }
 
-func advanceRemaining(db *gorm.DB, ar *models.AdvanceRequests, excludeERID *uint) (float64, error) {
-	consumed, err := advanceConsumed(db, ar.ID, excludeERID, []string{"pending", "approved"})
+func AdvanceRemaining(db *gorm.DB, ar *models.AdvanceRequests, excludeERID *uint) (float64, error) {
+	consumed, err := AdvanceConsumed(db, ar.ID, excludeERID, []string{"pending", "approved"})
 	if err != nil {
 		return 0, err
 	}
@@ -49,7 +43,7 @@ func advanceRemaining(db *gorm.DB, ar *models.AdvanceRequests, excludeERID *uint
 	return remaining, nil
 }
 
-func fillAdvanceBalances(db *gorm.DB, ars []models.AdvanceRequests) error {
+func FillAdvanceBalances(db *gorm.DB, ars []models.AdvanceRequests) error {
 	if len(ars) == 0 {
 		return nil
 	}
@@ -88,8 +82,8 @@ func fillAdvanceBalances(db *gorm.DB, ars []models.AdvanceRequests) error {
 	return nil
 }
 
-func advanceFullySettled(db *gorm.DB, ar *models.AdvanceRequests) (bool, error) {
-	settled, err := advanceConsumed(db, ar.ID, nil, []string{"approved"})
+func AdvanceFullySettled(db *gorm.DB, ar *models.AdvanceRequests) (bool, error) {
+	settled, err := AdvanceConsumed(db, ar.ID, nil, []string{"approved"})
 	if err != nil {
 		return false, err
 	}
@@ -103,7 +97,7 @@ func ReconcileAdvanceStatuses(db *gorm.DB) (int64, error) {
 		SET ar.status = 'completed'
 		WHERE ar.status = 'approved'
 		  AND (
-			SELECT COALESCE(SUM(`+consumedSQL+`), 0)
+			SELECT COALESCE(SUM(` + consumedSQL + `), 0)
 			FROM expense_requests
 			WHERE expense_requests.advance_request_id = ar.id
 			  AND expense_requests.status = 'approved'

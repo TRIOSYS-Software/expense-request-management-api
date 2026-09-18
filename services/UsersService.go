@@ -3,11 +3,11 @@ package services
 import (
 	"errors"
 	"fmt"
-	helper "shwetaik-expense-management-api/Helper"
 	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/repositories"
+	"shwetaik-expense-management-api/security"
 	"shwetaik-expense-management-api/utilities"
 
 	"time"
@@ -32,7 +32,7 @@ func (u *UsersService) GetAllUsers() ([]models.Users, error) {
 }
 
 func (u *UsersService) CreateUser(user *models.Users) error {
-	hashPassword, err := helper.HashPassword(user.Password)
+	hashPassword, err := security.HashPassword(user.Password)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (u *UsersService) GetUsersByRole(roleID uint) (*[]models.Users, error) {
 
 func (u *UsersService) UpdateUser(user *models.Users) error {
 	if user.Password != "" {
-		hashPassword, err := helper.HashPassword(user.Password)
+		hashPassword, err := security.HashPassword(user.Password)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func (u *UsersService) LoginUser(user *models.Users) (*dtos.LoginResponseDTO, er
 	if err != nil {
 		return nil, err
 	}
-	if !helper.CheckPasswordHash(user.Password, getUser.Password) {
+	if !security.CheckPasswordHash(user.Password, getUser.Password) {
 		return nil, errors.New("invalid password")
 	}
 	claims := jwt.MapClaims{
@@ -122,10 +122,10 @@ func (u *UsersService) ChangePassword(id uint, request *dtos.ChangePasswordReque
 	if err != nil {
 		return err
 	}
-	if !helper.CheckPasswordHash(request.OldPassword, user.Password) {
+	if !security.CheckPasswordHash(request.OldPassword, user.Password) {
 		return fmt.Errorf("Invalid old password")
 	}
-	hashPassword, err := helper.HashPassword(request.NewPassword)
+	hashPassword, err := security.HashPassword(request.NewPassword)
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (u *UsersService) ForgotPassword(request *dtos.PasswordResetRequestDTO) err
 	if err != nil {
 		return err
 	}
-	token := helper.GenerateToken()
+	token := security.GenerateToken()
 	if token == "" {
 		return errors.New("failed to generate token")
 	}
@@ -181,7 +181,7 @@ func (u *UsersService) ResetPassword(request *dtos.PasswordResetChangeRequestDTO
 	if err != nil {
 		return err
 	}
-	hashPassword, err := helper.HashPassword(request.Password)
+	hashPassword, err := security.HashPassword(request.Password)
 	if err != nil {
 		return err
 	}

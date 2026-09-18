@@ -1,12 +1,7 @@
 package controllers
 
 import (
-	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 	"shwetaik-expense-management-api/services"
@@ -22,10 +17,10 @@ type ExpenseRequestsController struct {
 	UploadDir              string
 }
 
-func NewExpenseRequestsController(expenseRequestsService *services.ExpenseRequestsService) *ExpenseRequestsController {
+func NewExpenseRequestsController(expenseRequestsService *services.ExpenseRequestsService, uploadDir string) *ExpenseRequestsController {
 	return &ExpenseRequestsController{
 		ExpenseRequestsService: expenseRequestsService,
-		UploadDir:              configs.Envs.UploadDir,
+		UploadDir:              uploadDir,
 	}
 }
 
@@ -41,16 +36,19 @@ func parseOptionalFloat(c echo.Context, field string) *float64 {
 	return &v
 }
 
-func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
+func (er *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
 	var filterReq dtos.ExpenseRequestFilterDTO
 	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
 
 	// Extract admin's user ID from JWT context (same behavior as approver)
-	approverID := uint(c.Get("user_id").(float64))
+	approverID, err := currentUserID(c)
+	if err != nil {
+		return unauthorized(c)
+	}
 
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequests(approverID, &filterReq)
+	expenseRequests, total := er.ExpenseRequestsService.GetExpenseRequests(approverID, &filterReq)
 	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
@@ -70,13 +68,13 @@ func (ex *ExpenseRequestsController) GetExpenseRequests(c echo.Context) error {
 // @Failure 404 {object} string
 // @Router /expense-requests/{id} [get]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error {
+func (er *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
-	expenseRequest, err := ex.ExpenseRequestsService.GetExpenseRequestByID(uint(i))
+	expenseRequest, err := er.ExpenseRequestsService.GetExpenseRequestByID(uint(i))
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
@@ -95,7 +93,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByID(c echo.Context) error
 // @Failure 404 {object} string
 // @Router /expense-requests/user/{id} [get]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) error {
+func (er *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
@@ -105,7 +103,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i), &filterReq)
+	expenseRequests, total := er.ExpenseRequestsService.GetExpenseRequestsByUserID(uint(i), &filterReq)
 	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
@@ -130,67 +128,29 @@ func (ex *ExpenseRequestsController) GetExpenseRequestsByUserID(c echo.Context) 
 // @Failure 404 {object} string
 // @Router /expense-requests/summary [get]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) error {
-	filters := make(map[string]any)
-	if s := c.QueryParam("start_date"); s != "" {
-		if _, err := time.Parse("2006-01-02", s); err != nil {
-			return c.JSON(http.StatusBadRequest, "Invalid start date")
-		}
-		filters["start_date"] = s
+func (er *ExpenseRequestsController) GetExpenseRequestsSummary(c echo.Context) error {
+	filters, err := parseSummaryFilters(c)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 
-	if s := c.QueryParam("end_date"); s != "" {
-		if _, err := time.Parse("2006-01-02", s); err != nil {
-			return c.JSON(http.StatusBadRequest, "Invalid end date")
-		}
-		filters["end_date"] = s
-	}
-
-	if c.QueryParam("category_id") != "" {
-		categoryID, err := strconv.Atoi(c.QueryParam("category_id"))
-		if err != nil {
+	// category_id is expense-only, so it stays out of the shared parser.
+	if s := c.QueryParam("category_id"); s != "" {
+		categoryID, convErr := strconv.Atoi(s)
+		if convErr != nil {
 			return c.JSON(http.StatusBadRequest, "Invalid category ID")
 		}
 		filters["category_id"] = uint(categoryID)
 	}
 
-	if c.QueryParam("user_id") != "" {
-		userID, err := strconv.Atoi(c.QueryParam("user_id"))
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, "Invalid user ID")
-		}
-		filters["user_id"] = uint(userID)
-	}
-
-	if c.QueryParam("approver_id") != "" {
-		approverID, err := strconv.Atoi(c.QueryParam("approver_id"))
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, "Invalid approver ID")
-		}
-		filters["approver_id"] = uint(approverID)
-	}
-
-	if c.QueryParam("status") != "" {
-		status := c.QueryParam("status")
-		filters["status"] = status
-	}
-
-	if v, err := strconv.ParseBool(c.QueryParam("need_my_approval")); err == nil && v {
-		filters["need_my_approval"] = true
-	}
-
-	if s := c.QueryParam("search"); s != "" {
-		filters["search"] = s
-	}
-
-	summary, err := ex.ExpenseRequestsService.GetExpenseRequestsSummary(filters)
+	summary, err := er.ExpenseRequestsService.GetExpenseRequestsSummary(filters)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, summary)
 }
 
-func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
+func (er *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
 	filters := make(map[string]any)
 
 	if s := c.QueryParam("start_date"); s != "" {
@@ -223,7 +183,7 @@ func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
 		filters["approver_id"] = uint(approverID)
 	}
 
-	result, err := ex.ExpenseRequestsService.GetAnalytics(filters)
+	result, err := er.ExpenseRequestsService.GetAnalytics(filters)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": err.Error()})
 	}
@@ -242,90 +202,37 @@ func (ex *ExpenseRequestsController) GetAnalytics(c echo.Context) error {
 // @Failure 404 {object} string
 // @Router /expense-requests [post]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error {
+func (er *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error {
 	expenseRequest := new(models.ExpenseRequests)
 	if err := c.Bind(expenseRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	expenseRequest.AdvanceUsedAmount = parseOptionalFloat(c, "advance_used_amount")
 	expenseRequest.ReturnedAmount = parseOptionalFloat(c, "returned_amount")
-	file, err := c.FormFile("attachment")
-	if err == nil {
-		src, err := file.Open()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to open file")
-		}
-		defer src.Close()
 
-		ext := filepath.Ext(file.Filename)
-		uniqueFileName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
+	legacyName, err := saveLegacyAttachment(c, er.UploadDir)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	expenseRequest.Attachment = legacyName
 
-		if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to create upload directory")
-		}
-
-		dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
-		dst, err := os.Create(dstPath)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to create file")
-		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, src); err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to save file")
-		}
-		expenseRequest.Attachment = &uniqueFileName
-	} else {
-		expenseRequest.Attachment = nil
+	for _, att := range saveMultiAttachments(c, er.UploadDir) {
+		expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
+			FilePath: att.StoredName,
+			FileName: att.OriginalName,
+			FileType: att.ContentType,
+		})
 	}
 
-	// Handle Multiple Attachments
-	form, err := c.MultipartForm()
-	if err == nil {
-		files := form.File["attachments"]
-		for _, file := range files {
-			src, err := file.Open()
-			if err != nil {
-				continue
-			}
-			defer src.Close()
-
-			ext := filepath.Ext(file.Filename)
-			uniqueFileName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), "multi", ext)
-
-			if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
-				continue
-			}
-
-			dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
-			dst, err := os.Create(dstPath)
-			if err != nil {
-				continue
-			}
-			defer dst.Close()
-
-			if _, err := io.Copy(dst, src); err != nil {
-				continue
-			}
-
-			expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
-				FilePath: uniqueFileName,
-				FileName: file.Filename,
-				FileType: file.Header.Get("Content-Type"),
-			})
-		}
-	}
-
-	if err := ex.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
+	if err := er.ExpenseRequestsService.CreateExpenseRequest(expenseRequest); err != nil {
+		names := make([]string, 0, len(expenseRequest.Attachments)+1)
 		if expenseRequest.Attachment != nil {
-			dstPath := filepath.Join(ex.UploadDir, *expenseRequest.Attachment)
-			os.Remove(dstPath)
+			names = append(names, *expenseRequest.Attachment)
 		}
-		// Cleanup multi attachments on failure
 		for _, att := range expenseRequest.Attachments {
-			dstPath := filepath.Join(ex.UploadDir, att.FilePath)
-			os.Remove(dstPath)
+			names = append(names, att.FilePath)
 		}
+		discardStoredFiles(er.UploadDir, names...)
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
@@ -343,7 +250,7 @@ func (ex *ExpenseRequestsController) CreateExpenseRequest(c echo.Context) error 
 // @Failure 404 {object} string
 // @Router /expense-requests/approvers/{id} [get]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Context) error {
+func (er *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
@@ -353,8 +260,7 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 	if err := c.Bind(&filterReq); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
-	filterReq.ApproverID = uint(i)
-	expenseRequests, total := ex.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), &filterReq)
+	expenseRequests, total := er.ExpenseRequestsService.GetExpenseRequestByApproverID(uint(i), &filterReq)
 	pagination := dtos.NewPaginationResponse(filterReq.Page, filterReq.Limit(), int(total))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":       expenseRequests,
@@ -374,12 +280,12 @@ func (ex *ExpenseRequestsController) GetExpenseRequestByApproverID(c echo.Contex
 // @Failure 404 {object} string
 // @Router /expense-requests/{id}/sqlacc [post]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) error {
+func (er *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
-	if err := ex.ExpenseRequestsService.SendExpenseRequestToSQLACC(uint(id)); err != nil {
+	if err := er.ExpenseRequestsService.SendExpenseRequestToSQLACC(uint(id)); err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Expense request sent to SQLACC successfully")
@@ -398,7 +304,7 @@ func (ex *ExpenseRequestsController) SendExpenseRequestToSQLACC(c echo.Context) 
 // @Failure 404 {object} string
 // @Router /expense-requests/{id} [put]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error {
+func (er *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
@@ -411,87 +317,26 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 	expenseRequest.AdvanceUsedAmount = parseOptionalFloat(c, "advance_used_amount")
 	expenseRequest.ReturnedAmount = parseOptionalFloat(c, "returned_amount")
 
-	file, err := c.FormFile("attachment")
-	if err == nil {
-		src, err := file.Open()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to open file")
-		}
-		defer src.Close()
-
-		ext := filepath.Ext(file.Filename)
-		uniqueFileName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
-
-		if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to create upload directory")
-		}
-
-		dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
-		dst, err := os.Create(dstPath)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to create file")
-		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, src); err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to save file")
-		}
-
-		expenseRequest.Attachment = &uniqueFileName
+	legacyName, err := saveLegacyAttachment(c, er.UploadDir)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	// Unlike create, an absent upload leaves the existing attachment in place.
+	if legacyName != nil {
+		expenseRequest.Attachment = legacyName
 	}
 
-	// Manually bind KeptAttachmentIDs and KeepLegacyAttachment
-	form, _ := c.MultipartForm()
-	if form != nil {
-		if keptIDs, ok := form.Value["kept_attachment_ids"]; ok {
-			for _, idStr := range keptIDs {
-				if id, err := strconv.Atoi(idStr); err == nil {
-					expenseRequest.KeptAttachmentIDs = append(expenseRequest.KeptAttachmentIDs, uint(id))
-				}
-			}
-		}
-		if val, ok := form.Value["keep_legacy_attachment"]; ok && len(val) > 0 {
-			expenseRequest.KeepLegacyAttachment, _ = strconv.ParseBool(val[0])
-		}
+	expenseRequest.KeptAttachmentIDs, expenseRequest.KeepLegacyAttachment = attachmentRetention(c)
+
+	for _, att := range saveMultiAttachments(c, er.UploadDir) {
+		expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
+			FilePath: att.StoredName,
+			FileName: att.OriginalName,
+			FileType: att.ContentType,
+		})
 	}
 
-	// Handle Multiple Attachments for Update
-	if form, err = c.MultipartForm(); err == nil {
-		files := form.File["attachments"]
-		for _, file := range files {
-			src, err := file.Open()
-			if err != nil {
-				continue
-			}
-			defer src.Close()
-
-			ext := filepath.Ext(file.Filename)
-			uniqueFileName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), "multi", ext)
-
-			if err := os.MkdirAll(ex.UploadDir, os.ModePerm); err != nil {
-				continue
-			}
-
-			dstPath := filepath.Join(ex.UploadDir, uniqueFileName)
-			dst, err := os.Create(dstPath)
-			if err != nil {
-				continue
-			}
-			defer dst.Close()
-
-			if _, err := io.Copy(dst, src); err != nil {
-				continue
-			}
-
-			expenseRequest.Attachments = append(expenseRequest.Attachments, models.ExpenseRequestAttachments{
-				FilePath: uniqueFileName,
-				FileName: file.Filename,
-				FileType: file.Header.Get("Content-Type"),
-			})
-		}
-	}
-
-	if err := ex.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {
+	if err := er.ExpenseRequestsService.UpdateExpenseRequest(uint(id), expenseRequest); err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, expenseRequest)
@@ -509,29 +354,29 @@ func (ex *ExpenseRequestsController) UpdateExpenseRequest(c echo.Context) error 
 // @Failure 404 {object} string
 // @Router /expense-requests/{id} [delete]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error {
+func (er *ExpenseRequestsController) DeleteExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
-	if err := ex.ExpenseRequestsService.DeleteExpenseRequest(uint(id)); err != nil {
+	if err := er.ExpenseRequestsService.DeleteExpenseRequest(uint(id)); err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, "Expense request deleted successfully")
 }
 
-func (ex *ExpenseRequestsController) SoftDeleteExpenseRequest(c echo.Context) error {
+func (er *ExpenseRequestsController) SoftDeleteExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
 	}
-	if err := ex.ExpenseRequestsService.SoftDeleteExpenseRequest(uint(id)); err != nil {
+	if err := er.ExpenseRequestsService.SoftDeleteExpenseRequest(uint(id)); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, echo.Map{"message": "Expense request soft-deleted"})
 }
 
-func (ex *ExpenseRequestsController) CompleteExpenseRequest(c echo.Context) error {
+func (er *ExpenseRequestsController) CompleteExpenseRequest(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid expense request id"})
@@ -540,8 +385,11 @@ func (ex *ExpenseRequestsController) CompleteExpenseRequest(c echo.Context) erro
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": err.Error()})
 	}
-	actorUserID := uint(c.Get("user_id").(float64))
-	if err := ex.ExpenseRequestsService.CompleteExpenseRequest(uint(id), actorUserID, body.Comment); err != nil {
+	actorUserID, err := currentUserID(c)
+	if err != nil {
+		return unauthorized(c)
+	}
+	if err := er.ExpenseRequestsService.CompleteExpenseRequest(uint(id), actorUserID, body.Comment); err != nil {
 		return c.JSON(http.StatusConflict, echo.Map{"message": err.Error()})
 	}
 	return c.JSON(http.StatusOK, echo.Map{"message": "Expense request completed"})
@@ -559,8 +407,6 @@ func (ex *ExpenseRequestsController) CompleteExpenseRequest(c echo.Context) erro
 // @Failure 404 {object} string
 // @Router /expense-requests/attachment/{filename} [get]
 // @Security JWT Token
-func (ex *ExpenseRequestsController) ServeExpenseRequestAttachment(c echo.Context) error {
-	file := c.Param("filename")
-	filePath := filepath.Join(ex.UploadDir, file)
-	return c.File(filePath)
+func (er *ExpenseRequestsController) ServeExpenseRequestAttachment(c echo.Context) error {
+	return serveUploadedFile(c, er.UploadDir, c.Param("filename"))
 }

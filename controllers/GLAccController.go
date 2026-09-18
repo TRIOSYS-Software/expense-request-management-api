@@ -26,8 +26,8 @@ func NewGLAccController(glAccService *services.GLAccService) *GLAccController {
 // @Failure 500 {object} map[string]interface{}
 // @Router /gl-acc/sync [post]
 // @Security JWT Token
-func (c *GLAccController) SyncGLAcc(ctx echo.Context) error {
-	if err := c.GLAccService.SyncGLAcc(); err != nil {
+func (gl *GLAccController) SyncGLAcc(ctx echo.Context) error {
+	if err := gl.GLAccService.SyncGLAcc(); err != nil {
 		log.Printf("Error syncing GLAcc: %v", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]interface{}{"error": "Failed to sync GLAcc"})
 	}
@@ -44,8 +44,8 @@ func (c *GLAccController) SyncGLAcc(ctx echo.Context) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /gl-acc [get]
 // @Security JWT Token
-func (c *GLAccController) GetGLAcc(ctx echo.Context) error {
-	glAcc, err := c.GLAccService.GetGLAcc()
+func (gl *GLAccController) GetGLAcc(ctx echo.Context) error {
+	glAcc, err := gl.GLAccService.GetGLAcc()
 	if err != nil {
 		log.Printf("Error fetching GLAcc: %v", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]interface{}{"error": "Failed to fetch GLAcc"})

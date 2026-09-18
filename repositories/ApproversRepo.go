@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
 
 	"gorm.io/gorm"
@@ -12,21 +13,6 @@ type ApproversRepo struct {
 
 func NewApproversRepo(db *gorm.DB) *ApproversRepo {
 	return &ApproversRepo{db: db}
-}
-
-type ApproverExpenseAction struct {
-	models.ExpenseApprovals
-	Request *models.ExpenseRequests `json:"request,omitempty"`
-}
-
-type ApproverAdvanceAction struct {
-	models.AdvanceApprovals
-	Request *models.AdvanceRequests `json:"request,omitempty"`
-}
-
-type ApproverActionsResult struct {
-	ExpenseActions []ApproverExpenseAction `json:"expense_actions"`
-	AdvanceActions []ApproverAdvanceAction `json:"advance_actions"`
 }
 
 func (r *ApproversRepo) approverEligibilitySubquery() *gorm.DB {
@@ -80,10 +66,10 @@ func (r *ApproversRepo) IsRoleAdmin(roleID uint) bool {
 	return role.IsAdmin
 }
 
-func (r *ApproversRepo) GetApproverActionsForViewer(approverID, viewerID uint, viewerIsAdmin bool) (ApproverActionsResult, error) {
-	result := ApproverActionsResult{
-		ExpenseActions: []ApproverExpenseAction{},
-		AdvanceActions: []ApproverAdvanceAction{},
+func (r *ApproversRepo) GetApproverActionsForViewer(approverID, viewerID uint, viewerIsAdmin bool) (dtos.ApproverActionsResult, error) {
+	result := dtos.ApproverActionsResult{
+		ExpenseActions: []dtos.ApproverExpenseAction{},
+		AdvanceActions: []dtos.ApproverAdvanceAction{},
 	}
 
 	// --- Expense ---
@@ -131,7 +117,7 @@ func (r *ApproversRepo) GetApproverActionsForViewer(approverID, viewerID uint, v
 				continue
 			}
 			copyReq := req
-			row := ApproverExpenseAction{ExpenseApprovals: a, Request: &copyReq}
+			row := dtos.ApproverExpenseAction{ExpenseApprovals: a, Request: &copyReq}
 			result.ExpenseActions = append(result.ExpenseActions, row)
 		}
 	}
@@ -181,7 +167,7 @@ func (r *ApproversRepo) GetApproverActionsForViewer(approverID, viewerID uint, v
 				continue
 			}
 			copyReq := req
-			row := ApproverAdvanceAction{AdvanceApprovals: a, Request: &copyReq}
+			row := dtos.ApproverAdvanceAction{AdvanceApprovals: a, Request: &copyReq}
 			result.AdvanceActions = append(result.AdvanceActions, row)
 		}
 	}

@@ -15,20 +15,49 @@ func NewRolesRepo(db *gorm.DB) *RolesRepo {
 	return &RolesRepo{db: db}
 }
 
+func (r *RolesRepo) userCountsByRole(roleIDs []uint) (map[uint]int64, error) {
+	counts := make(map[uint]int64, len(roleIDs))
+	if len(roleIDs) == 0 {
+		return counts, nil
+	}
+
+	var rows []struct {
+		RoleID uint
+		Total  int64
+	}
+	if err := r.db.Model(&models.Users{}).
+		Select("role_id, COUNT(*) AS total").
+		Where("role_id IN ?", roleIDs).
+		Group("role_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		counts[row.RoleID] = row.Total
+	}
+	return counts, nil
+}
+
 func (r *RolesRepo) GetRoles() ([]models.Roles, error) {
 	var roles []models.Roles
 	if err := r.db.Preload("Permissions").Find(&roles).Error; err != nil {
 		return nil, err
 	}
 
+	roleIDs := make([]uint, 0, len(roles))
+	for _, role := range roles {
+		roleIDs = append(roleIDs, role.ID)
+	}
+	counts, err := r.userCountsByRole(roleIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// A role with no users is absent from the grouped result; the zero value is
+	// already correct for it.
 	for i := range roles {
-		var count int64
-		if err := r.db.Model(&models.Users{}).
-			Where("role_id = ?", roles[i].ID).
-			Count(&count).Error; err != nil {
-			return nil, err
-		}
-		roles[i].UserCount = count
+		roles[i].UserCount = counts[roles[i].ID]
 	}
 
 	return roles, nil
@@ -39,31 +68,12 @@ func (r *RolesRepo) GetRoleByID(id uint) (*models.Roles, error) {
 	if err := r.db.Preload("Permissions").First(&role, id).Error; err != nil {
 		return nil, err
 	}
-	
-	var count int64
-	if err := r.db.Model(&models.Users{}).
-		Where("role_id = ?", role.ID).
-		Count(&count).Error; err != nil {
-		return nil, err
-	}
-	role.UserCount = count
 
-	return &role, nil
-}
-
-func (r *RolesRepo) GetRoleByName(name string) (*models.Roles, error) {
-	var role models.Roles
-	if err := r.db.Where("LOWER(name) = LOWER(?)", name).First(&role).Error; err != nil {
+	counts, err := r.userCountsByRole([]uint{role.ID})
+	if err != nil {
 		return nil, err
 	}
-	
-	var count int64
-	if err := r.db.Model(&models.Users{}).
-		Where("role_id = ?", role.ID).
-		Count(&count).Error; err != nil {
-		return nil, err
-	}
-	role.UserCount = count
+	role.UserCount = counts[role.ID]
 
 	return &role, nil
 }

@@ -1,0 +1,32 @@
+{
+  "total": 6,
+  "pending": 2,
+  "approved": 2,
+  "rejected": 1,
+  "completed": 1,
+  "total_amount": 1225,
+  "approved_amount": 500,
+  "pending_amount": 175,
+  "completed_amount": 500,
+  "advance_used_amount": 400,
+  "daily_totals": {
+    "2024-03-01": {
+      "approved": 200,
+      "pending": 100,
+      "rejected": 0,
+      "completed": 0
+    },
+    "2024-03-02": {
+      "approved": 300,
+      "pending": 0,
+      "rejected": 50,
+      "completed": 0
+    },
+    "2024-03-05": {
+      "approved": 0,
+      "pending": 75,
+      "rejected": 0,
+      "completed": 500
+    }
+  }
+}

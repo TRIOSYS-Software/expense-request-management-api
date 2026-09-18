@@ -3,14 +3,11 @@ package repositories
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"shwetaik-expense-management-api/configs"
 	"shwetaik-expense-management-api/dtos"
 	"shwetaik-expense-management-api/models"
-	"shwetaik-expense-management-api/utilities"
+	"shwetaik-expense-management-api/notifications"
+	"shwetaik-expense-management-api/storage"
 	"sort"
-	"strconv"
 	"time"
 
 	firebase "firebase.google.com/go/v4"
@@ -23,15 +20,19 @@ type ExpenseRequestsRepo struct {
 	db               *gorm.DB
 	notificationRepo *NotificationRepo
 	deviceTokenRepo  *DeviceTokenRepo
-	uploadDir        string
+	notifier         *notifier
+	attachments      storage.AttachmentStore
 }
 
-func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App) *ExpenseRequestsRepo {
+func NewExpenseRequestsRepo(db *gorm.DB, firebaseApp *firebase.App, attachments storage.AttachmentStore) *ExpenseRequestsRepo {
+	notificationRepo := NewNotificationRepo(db, firebaseApp)
+	deviceTokenRepo := NewDeviceTokenRepo(db)
 	return &ExpenseRequestsRepo{
 		db:               db,
-		notificationRepo: NewNotificationRepo(db, firebaseApp),
-		deviceTokenRepo:  NewDeviceTokenRepo(db),
-		uploadDir:        configs.Envs.UploadDir,
+		notificationRepo: notificationRepo,
+		deviceTokenRepo:  deviceTokenRepo,
+		notifier:         newNotifier(notificationRepo, deviceTokenRepo),
+		attachments:      attachments,
 	}
 }
 
@@ -39,30 +40,13 @@ func applyFilters(db *gorm.DB, filter *dtos.ExpenseRequestFilterDTO) *gorm.DB {
 	if filter == nil {
 		return db
 	}
-	if filter.StartDate != "" && filter.EndDate != "" {
-		db = db.Where("DATE(expense_requests.date_submitted) BETWEEN ? AND ?", filter.StartDate, filter.EndDate)
-	} else if filter.StartDate != "" {
-		db = db.Where("DATE(expense_requests.date_submitted) >= ?", filter.StartDate)
-	} else if filter.EndDate != "" {
-		db = db.Where("DATE(expense_requests.date_submitted) <= ?", filter.EndDate)
-	}
-	if filter.Search != "" {
-		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id").
-			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = expense_requests.project")
-		searchPattern := "%" + filter.Search + "%"
-		if idVal, err := strconv.Atoi(filter.Search); err == nil {
-			db = db.Where("(expense_requests.id = ? OR expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, searchPattern, searchPattern, searchPattern, searchPattern)
-		} else {
-			db = db.Where("(expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", searchPattern, searchPattern, searchPattern, searchPattern)
-		}
-	}
-	if filter.MinAmount != nil {
-		db = db.Where("expense_requests.amount >= ?", *filter.MinAmount)
-	}
-	if filter.MaxAmount != nil {
-		db = db.Where("expense_requests.amount <= ?", *filter.MaxAmount)
-	}
-	return db
+	return applyRequestListFilters(db, "expense_requests", &requestListFilter{
+		StartDate: filter.StartDate,
+		EndDate:   filter.EndDate,
+		Search:    filter.Search,
+		MinAmount: filter.MinAmount,
+		MaxAmount: filter.MaxAmount,
+	})
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequests(approverID uint, filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
@@ -157,312 +141,33 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestsByUserID(id uint, filter *dtos.E
 	return expenseRequests, total
 }
 
-func (r *ExpenseRequestsRepo) GetExpenseRequestsSummary(filters map[string]any) (dtos.ExpenseRequestSummary, error) {
-	var expenseRequests []models.ExpenseRequests
-	var summary dtos.ExpenseRequestSummary
-
-	db := r.db.Model(&models.ExpenseRequests{})
-	if filters["need_my_approval"] != nil && filters["approver_id"] != nil {
-		// Awaiting: items pending at the caller's approval level.
-		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-			Where("expense_approvals.approver_id = ?", filters["approver_id"]).
-			Where("expense_requests.status = 'pending'").
-			Where("expense_approvals.level = expense_requests.current_approver_level").
-			Group("expense_requests.id")
-	} else if filters["user_id"] != nil && filters["approver_id"] != nil {
-		db = db.Joins("LEFT JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-			Where("(expense_requests.user_id = ? OR expense_approvals.approver_id = ?)", filters["user_id"], filters["approver_id"]).
-			Group("expense_requests.id")
-	} else if filters["user_id"] != nil {
-		db = db.Where("expense_requests.user_id = ?", filters["user_id"])
-	} else if filters["approver_id"] != nil {
-		db = db.Joins("JOIN expense_approvals ON expense_approvals.request_id = expense_requests.id").
-			Where("expense_approvals.approver_id = ?", filters["approver_id"]).
-			Group("expense_requests.id")
-	}
-
-	if filters["status"] != nil {
-		db = db.Where("expense_requests.status = ?", filters["status"].(string))
-	}
-
-	if filters["start_date"] != nil && filters["end_date"] != nil {
-		db = db.Where("DATE(date_submitted) BETWEEN ? AND ?", filters["start_date"], filters["end_date"])
-		summary.DailyTotal = make(map[string]dtos.DailyBreakdown)
-	}
-
-	if filters["amount"] != nil {
-		db = db.Where("amount = ?", filters["amount"])
-	}
-
-	if filters["search"] != nil {
-		search := filters["search"].(string)
-		db = db.Joins("LEFT JOIN users search_users ON search_users.id = expense_requests.user_id").
-			Joins("LEFT JOIN projects search_projects ON search_projects.CODE = expense_requests.project")
-		pattern := "%" + search + "%"
-		if idVal, err := strconv.Atoi(search); err == nil {
-			db = db.Where("(expense_requests.id = ? OR expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", idVal, pattern, pattern, pattern, pattern)
-		} else {
-			db = db.Where("(expense_requests.description LIKE ? OR search_users.name LIKE ? OR search_projects.CODE LIKE ? OR search_projects.DESCRIPTION LIKE ?)", pattern, pattern, pattern, pattern)
-		}
-	}
-
-	db.Find(&expenseRequests)
-
-	for _, expenseRequest := range expenseRequests {
-		summary.TotalAmount = summary.TotalAmount + expenseRequest.Amount
-		switch expenseRequest.Status {
-		case "pending":
-			summary.Pending++
-			summary.PendingAmount += expenseRequest.Amount
-		case "approved":
-			summary.Approved++
-			summary.ApprovedAmount += expenseRequest.Amount
-		case "completed":
-			summary.Completed++
-			summary.CompletedAmount += expenseRequest.Amount
-		case "rejected":
-			summary.Rejected++
-		}
-
-		// "Total Advance Amount" — gross amount taken from advances by non-rejected expenses.
-		if expenseRequest.Status != "rejected" && expenseRequest.AdvanceUsedAmount != nil {
-			summary.AdvanceUsedAmount += *expenseRequest.AdvanceUsedAmount
-		}
-
-		if filters["start_date"] != nil && filters["end_date"] != nil {
-			date := expenseRequest.DateSubmitted.Format("2006-01-02")
-			entry := summary.DailyTotal[date]
-			switch expenseRequest.Status {
-			case "approved":
-				entry.Approved += expenseRequest.Amount
-			case "pending":
-				entry.Pending += expenseRequest.Amount
-			case "completed":
-				entry.Completed += expenseRequest.Amount
-			case "rejected":
-				entry.Rejected += expenseRequest.Amount
-			}
-			summary.DailyTotal[date] = entry
-		}
-
-	}
-	summary.Total = len(expenseRequests)
-	return summary, nil
+type PendingNotification struct {
+	UserID  uint
+	Message string
+	Type    string
 }
 
-func (r *ExpenseRequestsRepo) CreateExpenseRequest(expenseRequest *models.ExpenseRequests) error {
-	tx := r.db.Begin()
-	defer func() {
-		if rec := recover(); rec != nil {
-			tx.Rollback()
-			log.Printf("PANIC recovered in CreateExpenseRequest: %v", rec)
-		}
-	}()
-
-	if err := validateAdvanceRequestLink(tx, expenseRequest, nil); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	var requestUser models.Users
-	err := tx.Preload("Roles").Preload("Departments").Where("id = ?", expenseRequest.UserID).First(&requestUser).Error
-	if err != nil {
-		tx.Rollback()
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("User with ID %d not found", expenseRequest.UserID)
-		}
-		return fmt.Errorf("Failed to retrieve user: %w", err)
-	}
-
-	if requestUser.DepartmentID == nil {
-		tx.Rollback()
-		return fmt.Errorf("User (ID %d - %s) has no department assigned", requestUser.ID, requestUser.Name)
-	}
-
-	// Safely get user's role name, as Roles is a *Roles
-	var userRoleName string
-	if requestUser.Roles != nil {
-		userRoleName = requestUser.Roles.Name
-	} else {
-		userRoleName = "Unknown Role"
-		log.Printf("WARN: User %d (%s) has no role assigned or role not found for role_id: %d", requestUser.ID, requestUser.Name, requestUser.RoleID)
-	}
-
-	approvalPolicy, err := r.findHighestPolicy(tx, expenseRequest, *requestUser.DepartmentID)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	var approvalPoliciesUsers []models.ApprovalPoliciesUsers
-	if err := tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers).Error; err != nil {
-		tx.Rollback()
-		return fmt.Errorf("Failed to retrieve approver users: %w", err)
-	}
-
-	if len(approvalPoliciesUsers) == 0 {
-		tx.Rollback()
-		return fmt.Errorf("No approver users found")
-	}
-
-	if err := tx.Create(expenseRequest).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	type pendingNotification struct {
-		userID  uint
-		message string
-		nType   string
-	}
-	var notifications []pendingNotification
-
-	for i, approverPolicyUser := range approvalPoliciesUsers {
-		expenseApprovals := models.ExpenseApprovals{
-			RequestID:  expenseRequest.ID,
-			ApproverID: approverPolicyUser.UserID,
-			Level:      approverPolicyUser.Level,
-			Status:     "pending",
-			IsFinal:    i == len(approvalPoliciesUsers)-1,
-		}
-		if err := tx.Create(&expenseApprovals).Error; err != nil {
-			tx.Rollback()
-			return err
-		}
-
-		if approverPolicyUser.Level == expenseRequest.CurrentApproverLevel {
-			message := fmt.Sprintf(
-				"%s (%s) has created a new expense request (#%d) for your approval. Amount: $%.2f",
-				requestUser.Name,
-				userRoleName,
-				expenseRequest.ID,
-				expenseRequest.Amount,
-			)
-			notifications = append(notifications, pendingNotification{
-				userID:  approverPolicyUser.UserID,
-				message: message,
-				nType:   "new_request",
+func (r *ExpenseRequestsRepo) NotifyNewRequest(requestID uint, pending []PendingNotification) {
+	go func() {
+		for _, n := range pending {
+			r.notifier.dispatch(notifications.Notification{
+				UserID:    n.UserID,
+				RequestID: requestID,
+				Message:   n.Message,
+				Type:      n.Type,
+				PushTitle: "New Expense Request",
+				Kind:      notifications.Expense,
 			})
 		}
-	}
-
-	if len(notifications) == 0 {
-		log.Printf("WARN: No approver matched CurrentApproverLevel %d for expense request %d", expenseRequest.CurrentApproverLevel, expenseRequest.ID)
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-
-	// Send notifications in background — don't block the HTTP response
-	go func() {
-		for _, n := range notifications {
-			notification := &models.Notification{
-				UserID:    n.userID,
-				ExpenseID: expenseRequest.ID,
-				Message:   n.message,
-				Type:      n.nType,
-				IsRead:    false,
-			}
-
-			if err := r.notificationRepo.CreateNotification(notification); err != nil {
-				log.Printf("Error saving notification to DB for user %d: %v", n.userID, err)
-			}
-
-			tokens, err := r.deviceTokenRepo.GetTokensByUserID(n.userID)
-			if err != nil {
-				log.Printf("Error fetching device tokens for user %d: %v", n.userID, err)
-			} else if len(tokens) > 0 {
-				data := map[string]string{
-					"expenseId": fmt.Sprintf("%d", expenseRequest.ID),
-					"type":      n.nType,
-				}
-				r.notificationRepo.SendPushNotification(tokens, "New Expense Request", n.message, data)
-			}
-
-			utilities.SendWebSocketMessage(
-				n.userID,
-				utilities.WebSocketMessagePayload{
-					ID:        notification.ID,
-					Message:   n.message,
-					Type:      n.nType,
-					ExpenseID: expenseRequest.ID,
-					IsRead:    false,
-					CreatedAt: notification.CreatedAt.Format(time.RFC3339),
-				},
-			)
-		}
 	}()
-
-	return nil
-}
-func validateAdvanceRequestLink(tx *gorm.DB, request *models.ExpenseRequests, excludeID *uint) error {
-	if request.Amount < 0 {
-		return fmt.Errorf("Expense amount cannot be negative")
-	}
-
-	if request.AdvanceRequestID == nil {
-		request.AdvanceUsedAmount = nil
-		request.ReturnedAmount = nil
-		return nil
-	}
-
-	if request.AdvanceUsedAmount == nil || *request.AdvanceUsedAmount <= 0 {
-		return fmt.Errorf("Advance used amount is required and must be greater than zero when an advance request is linked")
-	}
-	used := *request.AdvanceUsedAmount
-
-	returned := 0.0
-	if request.ReturnedAmount != nil {
-		returned = *request.ReturnedAmount
-		if returned <= 0 {
-			return fmt.Errorf("Returned amount, when provided, must be greater than zero")
-		}
-	}
-
-	var ar models.AdvanceRequests
-	if err := tx.First(&ar, *request.AdvanceRequestID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("Linked advance request not found")
-		}
-		return fmt.Errorf("Failed to load linked advance request: %w", err)
-	}
-	if ar.UserID != request.UserID {
-		return fmt.Errorf("You may only link an advance request created by yourself")
-	}
-	if ar.Status != "approved" {
-		return fmt.Errorf("Only an approved advance request may be linked")
-	}
-
-	remaining, err := advanceRemaining(tx, &ar, excludeID)
-	if err != nil {
-		return fmt.Errorf("Failed to compute advance request balance: %w", err)
-	}
-	if used > remaining+balanceEpsilon {
-		return fmt.Errorf("Advance used amount (%.2f) exceeds the advance request's remaining balance (%.2f)", used, remaining)
-	}
-
-	leftover := used - request.Amount
-	if leftover < 0 {
-		leftover = 0
-	}
-	if returned > leftover+balanceEpsilon {
-		return fmt.Errorf("Returned amount (%.2f) cannot exceed the unused portion of the advance used (%.2f)", returned, leftover)
-	}
-
-	return nil
 }
 
 func (r *ExpenseRequestsRepo) findHighestPolicy(tx *gorm.DB, request *models.ExpenseRequests, departmentID uint) (*models.ApprovalPolicies, error) {
-	var approvalPolicy models.ApprovalPolicies
-	err := tx.Where(
-		"policy_type = 'expense' AND (department_id = ? OR department_id IS NULL) AND project = ? AND ? BETWEEN min_amount AND max_amount AND (NOT EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id) OR EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id AND gl_account_dockey = CAST(? AS UNSIGNED)))",
-		departmentID, request.Project, request.Amount, request.GLAccount,
-	).Order("NOT EXISTS (SELECT 1 FROM approval_policy_gl_accounts WHERE approval_policy_id = approval_policies.id) ASC").First(&approvalPolicy).Error
+	policy, err := findMatchingPolicy(tx, "expense", departmentID, request.Project, request.Amount, request.GLAccount)
 	if err != nil {
 		return nil, fmt.Errorf("No approval policy found")
 	}
-	return &approvalPolicy, nil
+	return policy, nil
 }
 
 func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dtos.ExpenseRequestFilterDTO) ([]models.ExpenseRequests, int64) {
@@ -513,20 +218,14 @@ func (r *ExpenseRequestsRepo) GetExpenseRequestByApproverID(id uint, filter *dto
 	return expenseRequests, total
 }
 
-func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *models.ExpenseRequests) error {
-	tx := r.db.Begin()
+// UpdateExpenseRequestTx applies an update inside the caller's transaction.
+// Advance-link validation is the caller's responsibility (the service does it
+// through the same transaction) so the balance read and the write agree.
+func (r *ExpenseRequestsRepo) UpdateExpenseRequestTx(id uint, expenseRequest *models.ExpenseRequests) error {
+	tx := r.db
 
 	var old_expenseRequest models.ExpenseRequests
 	if err := tx.First(&old_expenseRequest, id).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// Carry forward UserID from the existing row for validation (form may omit it on update).
-	expenseRequest.UserID = old_expenseRequest.UserID
-	excludeID := old_expenseRequest.ID
-	if err := validateAdvanceRequestLink(tx, expenseRequest, &excludeID); err != nil {
-		tx.Rollback()
 		return err
 	}
 
@@ -542,17 +241,13 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 	if old_expenseRequest.Attachment != nil {
 		if !expenseRequest.KeepLegacyAttachment {
 			// User wants to remove the legacy attachment
-			oldFilePath := filepath.Join(r.uploadDir, *old_expenseRequest.Attachment)
-			if _, err := os.Stat(oldFilePath); err == nil {
-				os.Remove(oldFilePath)
-			}
+			r.attachments.Remove(*old_expenseRequest.Attachment)
 			old_expenseRequest.Attachment = nil
 		}
 	}
 
 	var existingAttachments []models.ExpenseRequestAttachments
 	if err := tx.Where("expense_request_id = ?", old_expenseRequest.ID).Find(&existingAttachments).Error; err != nil {
-		tx.Rollback()
 		return err
 	}
 
@@ -565,14 +260,10 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		if !keptIDsMap[att.ID] {
 			// Delete from DB
 			if err := tx.Unscoped().Delete(&att).Error; err != nil {
-				tx.Rollback()
 				return err
 			}
 			// Delete from Disk
-			filePath := filepath.Join(r.uploadDir, att.FilePath)
-			if _, err := os.Stat(filePath); err == nil {
-				os.Remove(filePath)
-			}
+			r.attachments.Remove(att.FilePath)
 		}
 	}
 
@@ -581,7 +272,6 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		for _, att := range expenseRequest.Attachments {
 			att.ExpenseRequestID = old_expenseRequest.ID
 			if err := tx.Create(&att).Error; err != nil {
-				tx.Rollback()
 				return err
 			}
 		}
@@ -595,12 +285,10 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		old_expenseRequest.CurrentApproverLevel = 1
 
 		if err := tx.Save(&old_expenseRequest).Error; err != nil {
-			tx.Rollback()
 			return err
 		}
 
 		if err := tx.Where("request_id = ?", old_expenseRequest.ID).Delete(&models.ExpenseApprovals{}).Error; err != nil {
-			tx.Rollback()
 			return err
 		}
 
@@ -609,7 +297,6 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 
 		approvalPolicy, err := r.findHighestPolicy(tx, expenseRequest, *requestUser.DepartmentID)
 		if err != nil {
-			tx.Rollback()
 			return err
 		}
 
@@ -617,12 +304,10 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 		tx.Preload("Approver").Where("approval_policy_id = ?", approvalPolicy.ID).Order("level ASC").Find(&approvalPoliciesUsers)
 
 		if len(approvalPoliciesUsers) == 0 {
-			tx.Rollback()
 			return fmt.Errorf("No approver users found")
 		}
 
 		for i, approverPolicyUser := range approvalPoliciesUsers {
-			fmt.Println("approver", approverPolicyUser, i)
 			expenseApprovals := models.ExpenseApprovals{
 				RequestID:  old_expenseRequest.ID,
 				ApproverID: approverPolicyUser.UserID,
@@ -631,29 +316,28 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 				IsFinal:    i == len(approvalPoliciesUsers)-1,
 			}
 			if err := tx.Create(&expenseApprovals).Error; err != nil {
-				tx.Rollback()
 				return err
 			}
 		}
 	}
 
 	if err := tx.Save(&old_expenseRequest).Error; err != nil {
-		tx.Rollback()
 		return err
 	}
 
-	return tx.Commit().Error
+	return nil
 }
 
 func (r *ExpenseRequestsRepo) UpdateSendToSQLACCStatus(id uint, status bool) error {
 	return r.db.Model(&models.ExpenseRequests{}).Where("id = ?", id).Update("is_send_to_sqlacc", status).Error
 }
 
-func (r *ExpenseRequestsRepo) CompleteExpenseRequest(id uint, actorUserID uint, comment *string) error {
+func (r *ExpenseRequestsRepo) CompleteExpenseRequest(id uint, actorUserID uint, comment *string) (err error) {
 	tx := r.db.Begin()
 	defer func() {
 		if rec := recover(); rec != nil {
 			_ = tx.Rollback()
+			err = fmt.Errorf("internal error in CompleteExpenseRequest: %v", rec)
 			log.Printf("PANIC recovered in CompleteExpenseRequest: %v", rec)
 		}
 	}()
@@ -685,43 +369,17 @@ func (r *ExpenseRequestsRepo) CompleteExpenseRequest(id uint, actorUserID uint, 
 		return err
 	}
 
-	go func() {
-		msg := fmt.Sprintf(
+	go r.notifier.dispatch(notifications.Notification{
+		UserID:    er.UserID,
+		RequestID: er.ID,
+		Message: fmt.Sprintf(
 			"Your expense request (#%d - '%s') has been manually completed.",
 			er.ID, er.Description,
-		)
-		notification := &models.Notification{
-			UserID:    er.UserID,
-			ExpenseID: er.ID,
-			Message:   msg,
-			Type:      "expense_completed",
-			IsRead:    false,
-		}
-		if err := r.notificationRepo.CreateNotification(notification); err != nil {
-			log.Printf("Error saving complete notification for user %d: %v", er.UserID, err)
-		}
-
-		tokens, err := r.deviceTokenRepo.GetTokensByUserID(er.UserID)
-		if err == nil && len(tokens) > 0 {
-			data := map[string]string{
-				"expenseId": fmt.Sprintf("%d", er.ID),
-				"type":      "expense_completed",
-			}
-			r.notificationRepo.SendPushNotification(tokens, "Expense Request Completed", msg, data)
-		}
-
-		utilities.SendWebSocketMessage(
-			er.UserID,
-			utilities.WebSocketMessagePayload{
-				ID:        notification.ID,
-				Message:   msg,
-				Type:      "expense_completed",
-				ExpenseID: er.ID,
-				IsRead:    false,
-				CreatedAt: notification.CreatedAt.Format(time.RFC3339),
-			},
-		)
-	}()
+		),
+		Type:      "expense_completed",
+		PushTitle: "Expense Request Completed",
+		Kind:      notifications.Expense,
+	})
 
 	return nil
 }

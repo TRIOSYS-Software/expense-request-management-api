@@ -15,6 +15,13 @@ func NewProjectRepo(db *gorm.DB) *ProjectRepo {
 	return &ProjectRepo{db: db}
 }
 
+var projectRefs = []childRef{
+	{Table: "approval_policies", Column: "project"},
+	{Table: "expense_requests", Column: "project"},
+	{Table: "advance_requests", Column: "project"},
+	{Table: "users_projects", Column: "project_code"},
+}
+
 func (r *ProjectRepo) GetProjects() ([]models.Project, error) {
 	var projects []models.Project
 	err := r.db.Find(&projects).Error
@@ -25,28 +32,27 @@ func (r *ProjectRepo) GetProjects() ([]models.Project, error) {
 }
 
 // SaveProjects upserts the supplied set and removes any locally cached rows
-// whose CODE is not in the new set, all within one transaction.
+// whose CODE is not in the new set and is not still referenced by a request,
+// an approval policy or a user assignment, all within one transaction.
 func (r *ProjectRepo) SaveProjects(projects []models.Project) (SyncCounts, error) {
 	var counts SyncCounts
+	if len(projects) == 0 {
+		return counts, nil
+	}
+
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		keep := make([]string, 0, len(projects))
 		for _, p := range projects {
 			keep = append(keep, p.CODE)
 		}
 
-		del := tx.Where("CODE NOT IN ?", keep)
-		if len(keep) == 0 {
-			del = tx.Where("1 = 1")
+		deleted, retained, err := reconcile(tx, "projects", "CODE", keep, projectRefs)
+		if err != nil {
+			return err
 		}
-		delRes := del.Delete(&models.Project{})
-		if delRes.Error != nil {
-			return delRes.Error
-		}
-		counts.Deleted = delRes.RowsAffected
+		counts.Deleted = deleted
+		counts.Retained = retained
 
-		if len(projects) == 0 {
-			return nil
-		}
 		upRes := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "CODE"}},
 			UpdateAll: true,

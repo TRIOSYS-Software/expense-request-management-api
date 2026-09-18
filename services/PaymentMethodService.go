@@ -85,13 +85,21 @@ func (s *PaymentMethodService) SyncPaymentMethods() error {
 		return err
 	}
 
+	if len(paymentMethods) == 0 {
+		log.Printf("%s fetch returned no rows; skipping reconcile", tag)
+		return nil
+	}
+
 	saveStart := time.Now()
 	counts, err := s.repo.SavePaymentMethods(paymentMethods)
 	if err != nil {
 		log.Printf("%s failed during save after %s: %v", tag, time.Since(start).Round(time.Millisecond), err)
 		return err
 	}
-	log.Printf("%s save: upserted=%d deleted=%d in %s", tag, counts.Upserted, counts.Deleted, time.Since(saveStart).Round(time.Millisecond))
+	log.Printf("%s save: upserted=%d deleted=%d retained=%d in %s", tag, counts.Upserted, counts.Deleted, len(counts.Retained), time.Since(saveStart).Round(time.Millisecond))
+	if len(counts.Retained) > 0 {
+		log.Printf("%s retained (removed upstream, still referenced locally): %v", tag, counts.Retained)
+	}
 	log.Printf("%s done in %s", tag, time.Since(start).Round(time.Millisecond))
 	return nil
 }

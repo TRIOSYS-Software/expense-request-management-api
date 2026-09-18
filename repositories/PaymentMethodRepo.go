@@ -14,6 +14,12 @@ func NewPaymentMethodRepo(db *gorm.DB) *PaymentMethodRepo {
 	return &PaymentMethodRepo{db: db}
 }
 
+var paymentMethodRefs = []childRef{
+	{Table: "expense_requests", Column: "payment_method"},
+	{Table: "advance_requests", Column: "payment_method"},
+	{Table: "users_payment_methods", Column: "payment_method_code"},
+}
+
 func (r *PaymentMethodRepo) GetPaymentMethods() ([]models.PaymentMethod, error) {
 	var paymentMethods []models.PaymentMethod
 	err := r.db.Find(&paymentMethods).Error
@@ -24,5 +30,5 @@ func (r *PaymentMethodRepo) GetPaymentMethods() ([]models.PaymentMethod, error) 
 }
 
 func (r *PaymentMethodRepo) SavePaymentMethods(paymentMethods []models.PaymentMethod) (SyncCounts, error) {
-	return replaceAll(r.db, paymentMethods, "CODE", func(p models.PaymentMethod) string { return p.CODE })
+	return replaceAll(r.db, paymentMethods, "payment_methods", "CODE", func(p models.PaymentMethod) string { return p.CODE }, paymentMethodRefs)
 }

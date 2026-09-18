@@ -5,18 +5,31 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// SyncCounts is what a transactional reconcile-and-upsert reports back to
+// the caller: how many rows were affected by each step, plus the keys that
+// disappeared upstream but are still referenced locally and so were kept.
 type SyncCounts struct {
 	Upserted int64
 	Deleted  int64
+	Retained []string
 }
 
+// replaceAll upserts the supplied set and removes any locally cached rows whose
+// key is not in the new set and is not still referenced by one of refs, all
+// within one transaction so a network or DB failure can't leave a half-synced
+// table. An empty set is treated as a failed fetch and changes nothing.
 func replaceAll[T any, K comparable](
 	db *gorm.DB,
 	rows []T,
+	table string,
 	keyColumn string,
 	keyOf func(T) K,
+	refs []childRef,
 ) (SyncCounts, error) {
 	var counts SyncCounts
+	if len(rows) == 0 {
+		return counts, nil
+	}
 
 	err := db.Transaction(func(tx *gorm.DB) error {
 		keep := make([]K, 0, len(rows))
@@ -24,20 +37,12 @@ func replaceAll[T any, K comparable](
 			keep = append(keep, keyOf(row))
 		}
 
-		var model T
-		del := tx.Where(keyColumn+" NOT IN ?", keep)
-		if len(keep) == 0 {
-			del = tx.Where("1 = 1")
+		deleted, retained, err := reconcile(tx, table, keyColumn, keep, refs)
+		if err != nil {
+			return err
 		}
-		delRes := del.Delete(&model)
-		if delRes.Error != nil {
-			return delRes.Error
-		}
-		counts.Deleted = delRes.RowsAffected
-
-		if len(rows) == 0 {
-			return nil
-		}
+		counts.Deleted = deleted
+		counts.Retained = retained
 
 		upRes := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: keyColumn}},

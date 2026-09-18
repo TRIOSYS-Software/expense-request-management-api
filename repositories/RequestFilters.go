@@ -34,14 +34,15 @@ func applySearchFilter(db *gorm.DB, table, search string) *gorm.DB {
 		Joins("LEFT JOIN projects " + searchProjectsAlias + " ON " + searchProjectsAlias + ".CODE = " + table + ".project")
 
 	pattern := "%" + search + "%"
-	nameAndProject := searchUsersAlias + ".name LIKE ? OR " +
+	textColumns := table + ".description LIKE ? OR " +
+		searchUsersAlias + ".name LIKE ? OR " +
 		searchProjectsAlias + ".CODE LIKE ? OR " +
 		searchProjectsAlias + ".DESCRIPTION LIKE ?"
 
 	if id, err := strconv.Atoi(search); err == nil {
-		return db.Where("("+table+".id = ? OR "+nameAndProject+")", id, pattern, pattern, pattern)
+		return db.Where("("+table+".id = ? OR "+textColumns+")", id, pattern, pattern, pattern, pattern)
 	}
-	return db.Where("("+nameAndProject+")", pattern, pattern, pattern)
+	return db.Where("("+textColumns+")", pattern, pattern, pattern, pattern)
 }
 
 func applyAmountRangeFilter(db *gorm.DB, table string, minAmount, maxAmount *float64) *gorm.DB {

@@ -19,8 +19,8 @@ type Users struct {
 	Roles          *Roles                  `json:"roles,omitempty" gorm:"foreignKey:RoleID;references:ID"`
 	Departments    *Departments            `json:"departments,omitempty" gorm:"foreignKey:DepartmentID;references:ID"`
 	PolicyUsers    []ApprovalPoliciesUsers `json:"policy_users,omitempty" gorm:"foreignKey:UserID;references:ID"`
-	PaymentMethods []PaymentMethod         `json:"payment_methods,omitempty" gorm:"many2many:users_payment_methods;"`
-	GLAccounts     []GLAcc                 `json:"gl_accounts,omitempty" gorm:"many2many:users_gl_accounts;"`
-	Projects       []Project               `json:"projects,omitempty" gorm:"many2many:users_projects;"`
+	PaymentMethods []PaymentMethod         `json:"payment_methods,omitempty" gorm:"many2many:users_payment_methods;constraint:-"`
+	GLAccounts     []GLAcc                 `json:"gl_accounts,omitempty" gorm:"many2many:users_gl_accounts;constraint:-"`
+	Projects       []Project               `json:"projects,omitempty" gorm:"many2many:users_projects;constraint:-"`
 	DeviceTokens   []DeviceToken           `json:"-" gorm:"foreignKey:UserID;references:ID"`
 }

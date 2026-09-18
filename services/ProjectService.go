@@ -134,9 +134,12 @@ func (s *ProjectService) SyncProjects() error {
 		log.Printf("%s failed during save after %s: %v", tag, time.Since(start).Round(time.Millisecond), err)
 		return err
 	}
-	log.Printf("%s save: upserted=%d deleted=%d retained=%d in %s", tag, counts.Upserted, counts.Deleted, len(counts.Retained), time.Since(saveStart).Round(time.Millisecond))
-	if len(counts.Retained) > 0 {
-		log.Printf("%s retained (removed upstream, still referenced locally): %v", tag, counts.Retained)
+	log.Printf("%s save: upserted=%d deleted=%d renamed=%d in %s", tag, counts.Upserted, counts.Deleted, len(counts.Renamed), time.Since(saveStart).Round(time.Millisecond))
+	if len(counts.Renamed) > 0 {
+		log.Printf("%s renamed (references repointed): %v", tag, counts.Renamed)
+	}
+	if len(counts.RenameSkipped) > 0 {
+		log.Printf("%s rename skipped (ambiguous prefix, references kept as-is): %v", tag, counts.RenameSkipped)
 	}
 	log.Printf("%s done in %s", tag, time.Since(start).Round(time.Millisecond))
 	return nil

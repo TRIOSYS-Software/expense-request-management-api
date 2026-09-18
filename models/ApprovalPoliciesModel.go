@@ -13,6 +13,6 @@ type ApprovalPolicies struct {
 	UpdatedAt    time.Time               `json:"updated_at" gorm:"autoUpdateTime;not null"`
 	PolicyUsers  []ApprovalPoliciesUsers `json:"policy_users,omitempty" gorm:"foreignKey:ApprovalPolicyID;references:ID"`
 	Departments  Departments             `json:"departments,omitempty" gorm:"foreignKey:DepartmentID;references:ID"`
-	Projects     Project                 `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
-	GLAccounts   []GLAcc                 `json:"gl_accounts,omitempty" gorm:"many2many:approval_policy_gl_accounts;foreignKey:ID;joinForeignKey:ApprovalPolicyID;References:DOCKEY;joinReferences:GLAccountDockey"`
+	Projects     Project                 `json:"projects" gorm:"foreignKey:Project;references:CODE;constraint:-"`
+	GLAccounts   []GLAcc                 `json:"gl_accounts,omitempty" gorm:"many2many:approval_policy_gl_accounts;foreignKey:ID;joinForeignKey:ApprovalPolicyID;References:DOCKEY;joinReferences:GLAccountDockey;constraint:-"`
 }

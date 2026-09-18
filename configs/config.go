@@ -137,6 +137,28 @@ func (c *Config) SetupFirebase() error {
 	return nil
 }
 
+func (c *Config) dropSyncedMasterFKs() {
+	type fkRow struct {
+		TableName      string
+		ConstraintName string
+	}
+	var fks []fkRow
+	c.DB.Raw(`
+		SELECT TABLE_NAME AS table_name, CONSTRAINT_NAME AS constraint_name
+		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND REFERENCED_TABLE_NAME IN ('projects', 'gl_accs', 'payment_methods')
+	`).Scan(&fks)
+
+	for _, f := range fks {
+		if err := c.DB.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY `%s`", f.TableName, f.ConstraintName)).Error; err != nil {
+			log.Printf("Failed to drop FK %s on %s: %v", f.ConstraintName, f.TableName, err)
+		} else {
+			fmt.Printf("✅ Dropped FK %s on %s\n", f.ConstraintName, f.TableName)
+		}
+	}
+}
+
 func (c *Config) InitializedDB() {
 	c.DB.AutoMigrate(
 		&models.Users{},
@@ -163,6 +185,8 @@ func (c *Config) InitializedDB() {
 	)
 
 	c.DB.Exec("ALTER TABLE approval_policies DROP COLUMN IF EXISTS gl_account_id")
+
+	c.dropSyncedMasterFKs()
 
 	// Backfill: legacy approval_policies rows have NULL/empty policy_type — pin to 'expense'.
 	c.DB.Exec("UPDATE approval_policies SET policy_type = 'expense' WHERE policy_type IS NULL OR policy_type = ''")

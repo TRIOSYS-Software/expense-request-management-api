@@ -15,6 +15,12 @@ func NewPaymentMethodRepo(db *gorm.DB) *PaymentMethodRepo {
 	return &PaymentMethodRepo{db: db}
 }
 
+var paymentMethodRefs = []childRef{
+	{Table: "expense_requests", Column: "payment_method"},
+	{Table: "advance_requests", Column: "payment_method"},
+	{Table: "users_payment_methods", Column: "payment_method_code"},
+}
+
 func (r *PaymentMethodRepo) GetPaymentMethods() ([]models.PaymentMethod, error) {
 	var paymentMethods []models.PaymentMethod
 	err := r.db.Find(&paymentMethods).Error
@@ -34,28 +40,27 @@ func (r *PaymentMethodRepo) GetPaymentMethodByCode(code string) (*models.Payment
 }
 
 // SavePaymentMethods upserts the supplied set and removes any locally cached
-// rows whose CODE is not in the new set, all within one transaction.
+// rows whose CODE is not in the new set and is not still referenced by a
+// request or a user assignment, all within one transaction.
 func (r *PaymentMethodRepo) SavePaymentMethods(paymentMethods []models.PaymentMethod) (SyncCounts, error) {
 	var counts SyncCounts
+	if len(paymentMethods) == 0 {
+		return counts, nil
+	}
+
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		keep := make([]string, 0, len(paymentMethods))
 		for _, p := range paymentMethods {
 			keep = append(keep, p.CODE)
 		}
 
-		del := tx.Where("CODE NOT IN ?", keep)
-		if len(keep) == 0 {
-			del = tx.Where("1 = 1")
+		deleted, retained, err := reconcile(tx, "payment_methods", "CODE", keep, paymentMethodRefs)
+		if err != nil {
+			return err
 		}
-		delRes := del.Delete(&models.PaymentMethod{})
-		if delRes.Error != nil {
-			return delRes.Error
-		}
-		counts.Deleted = delRes.RowsAffected
+		counts.Deleted = deleted
+		counts.Retained = retained
 
-		if len(paymentMethods) == 0 {
-			return nil
-		}
 		upRes := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "CODE"}},
 			UpdateAll: true,

@@ -24,9 +24,9 @@ type AdvanceRequests struct {
 	IsSendToSQLACC       bool                        `json:"is_send_to_sql_acc" gorm:"not null;default:false"`
 	Approvals            []AdvanceApprovals          `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
 	User                 Users                       `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`
-	PaymentMethods       PaymentMethod               `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE"`
-	Projects             Project                     `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
-	GLAccounts           GLAcc                       `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY"`
+	PaymentMethods       PaymentMethod               `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE;constraint:-"`
+	Projects             Project                     `json:"projects" gorm:"foreignKey:Project;references:CODE;constraint:-"`
+	GLAccounts           GLAcc                       `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY;constraint:-"`
 	Attachments          []AdvanceRequestAttachments `json:"attachments,omitempty" gorm:"foreignKey:AdvanceRequestID"`
 	ExpenseRequest       *ExpenseRequests            `json:"expense_request,omitempty" gorm:"foreignKey:AdvanceRequestID"`
 	ExpenseRequests      []ExpenseRequests           `json:"expense_requests,omitempty" gorm:"foreignKey:AdvanceRequestID"`

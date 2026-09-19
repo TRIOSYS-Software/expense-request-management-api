@@ -11,5 +11,5 @@ type GLAcc struct {
 	TAX            string  `gorm:"column:TAX" json:"tax,omitempty"`
 	CASHFLOWTYPE   int     `gorm:"column:CASHFLOWTYPE" json:"cashflow_type,omitempty"`
 	SIC            string  `gorm:"column:SIC" json:"sic,omitempty"`
-	Users          []Users `json:"users,omitempty" gorm:"many2many:users_gl_accounts;"`
+	Users          []Users `json:"users,omitempty" gorm:"many2many:users_gl_accounts;constraint:-"`
 }

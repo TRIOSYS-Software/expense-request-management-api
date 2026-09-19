@@ -27,9 +27,9 @@ type ExpenseRequests struct {
 	ReturnedAmount       *float64                    `json:"returned_amount,omitempty" form:"returned_amount" gorm:"nullable"`
 	Approvals            []ExpenseApprovals          `json:"approvals,omitempty" gorm:"foreignKey:RequestID"`
 	User                 Users                       `json:"user,omitempty" gorm:"foreignKey:UserID;references:ID"`
-	PaymentMethods       PaymentMethod               `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE"`
-	Projects             Project                     `json:"projects" gorm:"foreignKey:Project;reference:CODE"`
-	GLAccounts           GLAcc                       `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY"`
+	PaymentMethods       PaymentMethod               `json:"payment_methods,omitempty" gorm:"foreignKey:PaymentMethod;references:CODE;constraint:-"`
+	Projects             Project                     `json:"projects" gorm:"foreignKey:Project;references:CODE;constraint:-"`
+	GLAccounts           GLAcc                       `json:"gl_accounts,omitempty" gorm:"foreignKey:GLAccount;references:DOCKEY;constraint:-"`
 	Attachments          []ExpenseRequestAttachments `json:"attachments,omitempty" gorm:"foreignKey:ExpenseRequestID"`
 	AdvanceRequest       *AdvanceRequests            `json:"advance_request,omitempty" gorm:"foreignKey:AdvanceRequestID;references:ID"`
 	KeptAttachmentIDs    []uint                      `json:"kept_attachment_ids,omitempty" form:"kept_attachment_ids" gorm:"-"`

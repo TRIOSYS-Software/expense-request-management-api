@@ -34,6 +34,7 @@ type AdvanceRequests struct {
 	KeepLegacyAttachment bool                        `json:"keep_legacy_attachment,omitempty" form:"keep_legacy_attachment" gorm:"-"`
 	RemainingBalance     float64                     `json:"remaining_balance" gorm:"-"`
 	SettledAmount        float64                     `json:"settled_amount" gorm:"-"`
+	Remark               *string                     `json:"remark,omitempty" form:"remark" gorm:"type:text"`
 	ClosureComment       *string                     `json:"closure_comment,omitempty" gorm:"type:text"`
 	ClosedByUserID       *uint                       `json:"closed_by_user_id,omitempty"`
 	ClosedAt             *time.Time                  `json:"closed_at,omitempty"`

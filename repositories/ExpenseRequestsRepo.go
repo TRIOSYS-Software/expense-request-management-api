@@ -532,6 +532,7 @@ func (r *ExpenseRequestsRepo) UpdateExpenseRequest(id uint, expenseRequest *mode
 
 	old_expenseRequest.IsSendToSQLACC = expenseRequest.IsSendToSQLACC
 	old_expenseRequest.Description = expenseRequest.Description
+	old_expenseRequest.Remark = expenseRequest.Remark
 	old_expenseRequest.PaymentMethod = expenseRequest.PaymentMethod
 	old_expenseRequest.GLAccount = expenseRequest.GLAccount
 	old_expenseRequest.AdvanceRequestID = expenseRequest.AdvanceRequestID

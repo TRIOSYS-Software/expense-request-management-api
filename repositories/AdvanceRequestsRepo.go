@@ -499,6 +499,7 @@ func (r *AdvanceRequestsRepo) UpdateAdvanceRequest(id uint, advanceRequest *mode
 	}
 
 	old.Description = advanceRequest.Description
+	old.Remark = advanceRequest.Remark
 	old.PaymentMethod = advanceRequest.PaymentMethod
 	old.GLAccount = advanceRequest.GLAccount
 

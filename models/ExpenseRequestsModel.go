@@ -34,6 +34,7 @@ type ExpenseRequests struct {
 	AdvanceRequest       *AdvanceRequests            `json:"advance_request,omitempty" gorm:"foreignKey:AdvanceRequestID;references:ID"`
 	KeptAttachmentIDs    []uint                      `json:"kept_attachment_ids,omitempty" form:"kept_attachment_ids" gorm:"-"`
 	KeepLegacyAttachment bool                        `json:"keep_legacy_attachment,omitempty" form:"keep_legacy_attachment" gorm:"-"`
+	Remark               *string                     `json:"remark,omitempty" form:"remark" gorm:"type:text"`
 	CompletionComment    *string                     `json:"completion_comment,omitempty" gorm:"type:text"`
 	CompletedByUserID    *uint                       `json:"completed_by_user_id,omitempty"`
 	CompletedAt          *time.Time                  `json:"completed_at,omitempty"`
